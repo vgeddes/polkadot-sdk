@@ -103,6 +103,7 @@ pub mod pallet {
 		type MessageConverter: ConvertMessage;
 		#[cfg(feature = "runtime-benchmarks")]
 		type Helper: BenchmarkHelper<Self>;
+		/// Extrinsic Weights
 		type WeightInfo: WeightInfo;
 	}
 
@@ -236,7 +237,7 @@ pub mod pallet {
 				.map_err(|error| Error::<T>::from(error))?;
 
 			// Forward XCM to AH
-			let dest = Location::new(1, [Parachain(T::AssetHubParaId::get())]);
+			let dest = Self::asset_hub_location();
 			let message_id = Self::send_xcm(dest.clone(), relayer.clone(), xcm.clone())
 				.map_err(|error| {
 					tracing::error!(target: "snowbridge_pallet_inbound_queue_v2::submit", ?error, ?dest, ?xcm, "XCM send failed with error");
@@ -256,6 +257,10 @@ pub mod pallet {
 			Ok(())
 		}
 
+		pub fn asset_hub_location() -> Location {
+			Location::new(1, [Parachain(T::AssetHubParaId::get())])
+		}
+
 		fn send_xcm(dest: Location, fee_payer: Location, xcm: Xcm<()>) -> Result<XcmHash, SendError> {
 			let (ticket, fee) = validate_send::<T::XcmSender>(dest, xcm)?;
 			T::XcmExecutor::charge_fees(fee_payer.clone(), fee.clone())
@@ -270,5 +275,6 @@ pub mod pallet {
 			Self::deposit_event(Event::FeesPaid { paying: fee_payer, fees: fee });
 			T::XcmSender::deliver(ticket)
 		}
+
 	}
 }

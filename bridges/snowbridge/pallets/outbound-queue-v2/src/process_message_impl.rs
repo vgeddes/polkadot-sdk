@@ -8,7 +8,7 @@ use frame_support::{
 	weights::WeightMeter,
 };
 
-impl<T: Config> ProcessMessage for Pallet<T> {
+impl<T: Config> ProcessMessage for Pallet<T>  where Location: From<T::AccountId>  {
 	type Origin = AggregateMessageOrigin;
 	fn process_message(
 		message: &[u8],

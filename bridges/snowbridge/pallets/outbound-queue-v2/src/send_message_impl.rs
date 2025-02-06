@@ -18,6 +18,7 @@ use sp_runtime::BoundedVec;
 impl<T> SendMessage for Pallet<T>
 where
 	T: Config,
+	Location: From<T::AccountId>
 {
 	type Ticket = Message;
 
@@ -52,7 +53,7 @@ where
 	}
 }
 
-impl<T: Config> SendMessageFeeProvider for Pallet<T> {
+impl<T: Config> SendMessageFeeProvider for Pallet<T> where Location: From<T::AccountId> {
 	type Balance = T::Balance;
 
 	/// The local component of the message processing fees in native currency

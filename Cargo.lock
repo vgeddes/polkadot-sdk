@@ -25079,6 +25079,8 @@ name = "snowbridge-inbound-queue-v2-runtime-api"
 version = "0.2.0"
 dependencies = [
  "frame-support 28.0.0",
+ "parity-scale-codec",
+ "scale-info",
  "snowbridge-core 0.2.0",
  "snowbridge-inbound-queue-primitives",
  "sp-api 26.0.0",
@@ -25384,6 +25386,7 @@ dependencies = [
  "snowbridge-beacon-primitives 0.2.0",
  "snowbridge-core 0.2.0",
  "snowbridge-inbound-queue-primitives",
+ "snowbridge-inbound-queue-v2-runtime-api",
  "snowbridge-pallet-ethereum-client 0.2.0",
  "snowbridge-pallet-inbound-queue-fixtures-v2",
  "sp-core 28.0.0",
