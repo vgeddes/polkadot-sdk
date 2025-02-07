@@ -36,7 +36,12 @@ pub enum ControlCall {
 	#[codec(index = 1)]
 	CreateAgent { location: Box<VersionedLocation>, fee: u128 },
 	#[codec(index = 2)]
-	RegisterToken { asset_id: Box<VersionedLocation>, metadata: AssetMetadata, fee: u128 },
+	RegisterToken {
+		asset_id: Box<VersionedLocation>,
+		asset_owner: Box<VersionedLocation>,
+		metadata: AssetMetadata,
+		fee: u128,
+	},
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -158,21 +163,24 @@ pub mod pallet {
 			metadata: AssetMetadata,
 			fee: u128,
 		) -> DispatchResult {
-			let origin_location = T::RegisterTokenOrigin::ensure_origin(origin)?;
+			let asset_owner_location = T::RegisterTokenOrigin::ensure_origin(origin)?;
 
 			let asset_location: Location =
 				(*asset_id).try_into().map_err(|_| Error::<T>::UnsupportedLocationVersion)?;
 
 			let mut checked = false;
-			if asset_location.eq(&origin_location) || asset_location.starts_with(&origin_location) {
+			if asset_location.eq(&asset_owner_location) ||
+				asset_location.starts_with(&asset_owner_location)
+			{
 				checked = true
 			}
 			ensure!(checked, <Error<T>>::OwnerCheck);
 
-			Self::burn_fees(origin_location.clone(), fee)?;
+			Self::burn_fees(asset_owner_location.clone(), fee)?;
 
 			let call = SnowbridgeControl::Control(ControlCall::RegisterToken {
 				asset_id: Box::new(VersionedLocation::from(asset_location.clone())),
+				asset_owner: Box::new(VersionedLocation::from(asset_owner_location.clone())),
 				metadata,
 				fee,
 			});

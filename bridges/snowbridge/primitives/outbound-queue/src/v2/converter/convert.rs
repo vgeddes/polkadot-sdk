@@ -5,7 +5,7 @@
 use codec::DecodeAll;
 use core::slice::Iter;
 use frame_support::{ensure, BoundedVec};
-use snowbridge_core::{AgentIdOf, TokenId, TokenIdOf};
+use snowbridge_core::{AgentId, AgentIdOf, TokenId, TokenIdOf};
 
 use crate::v2::{
 	message::{Command, Message},
@@ -57,16 +57,22 @@ macro_rules! match_expression {
 pub struct XcmConverter<'a, ConvertAssetId, Call> {
 	iter: Peekable<Iter<'a, Instruction<Call>>>,
 	ethereum_network: NetworkId,
+	forward_origin: AgentId,
 	_marker: PhantomData<ConvertAssetId>,
 }
 impl<'a, ConvertAssetId, Call> XcmConverter<'a, ConvertAssetId, Call>
 where
 	ConvertAssetId: MaybeEquivalence<TokenId, Location>,
 {
-	pub fn new(message: &'a Xcm<Call>, ethereum_network: NetworkId) -> Self {
+	pub fn new(
+		message: &'a Xcm<Call>,
+		ethereum_network: NetworkId,
+		forward_origin: AgentId,
+	) -> Self {
 		Self {
 			iter: message.inner().iter().peekable(),
 			ethereum_network,
+			forward_origin,
 			_marker: Default::default(),
 		}
 	}
@@ -254,7 +260,7 @@ where
 
 		let message = Message {
 			id: (*topic_id).into(),
-			origin_location: origin_location.clone(),
+			forward_origin: self.forward_origin,
 			origin,
 			fee: fee_amount,
 			commands: BoundedVec::try_from(commands).map_err(|_| TooManyCommands)?,

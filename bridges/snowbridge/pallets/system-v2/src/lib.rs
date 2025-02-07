@@ -117,6 +117,7 @@ pub mod pallet {
 		UnsupportedLocationVersion,
 		InvalidLocation,
 		Send(SendError),
+		OwnerCheck,
 	}
 
 	/// The set of registered agents
@@ -142,6 +143,8 @@ pub mod pallet {
 		/// Fee required: Yes
 		///
 		/// - `origin`: Must be `Location` of a sibling parachain
+		/// - `location`: The location of the agent (relative to this chain)
+		/// - `fee` The creation fee in ether
 		#[pallet::call_index(1)]
 		#[pallet::weight(T::WeightInfo::create_agent())]
 		pub fn create_agent(
@@ -149,75 +152,84 @@ pub mod pallet {
 			location: Box<VersionedLocation>,
 			fee: u128,
 		) -> DispatchResult {
-			let _ = match origin.clone().into() {
+			let forward_location = match origin.clone().into() {
 				Ok(RawOrigin::Root) => Ok(Here.into()),
 				_ => T::SiblingOrigin::ensure_origin(origin),
 			}?;
+			let forward_origin = agent_id_of::<T>(&forward_location)?;
 
+			// Agent reanchor to Ethereum context
+			let ethereum_location = T::EthereumLocation::get();
 			let origin_location: Location =
 				(*location).try_into().map_err(|_| Error::<T>::UnsupportedLocationVersion)?;
-
-			let ethereum_location = T::EthereumLocation::get();
-			// reanchor to Ethereum context
 			let location = origin_location
 				.clone()
 				.reanchored(&ethereum_location, &T::UniversalLocation::get())
 				.map_err(|_| Error::<T>::LocationConversionFailed)?;
-
 			let agent_id = agent_id_of::<T>(&location)?;
 
 			// Record the agent id or fail if it has already been created
 			ensure!(!Agents::<T>::contains_key(agent_id), Error::<T>::AgentAlreadyCreated);
 			Agents::<T>::insert(agent_id, ());
 
-			let command = Command::CreateAgent {};
+			Self::send(forward_origin, agent_id, Command::CreateAgent {}, fee)?;
 
-			Self::send(origin_location.clone(), command, fee)?;
-
-			Self::deposit_event(Event::<T>::CreateAgent {
-				location: Box::new(origin_location),
-				agent_id,
-			});
+			Self::deposit_event(Event::<T>::CreateAgent { location: Box::new(location), agent_id });
 			Ok(())
 		}
 
 		/// Registers a Polkadot-native token as a wrapped ERC20 token on Ethereum.
-		/// Privileged. Can only be called by root.
-		///
-		/// Fee required: No
-		///
 		/// - `origin`: Must be root
-		/// - `location`: Location of the asset (relative to this chain)
+		/// - `asset_id`: Location of the asset (relative to this chain)
+		/// - `asset_owner`: Location of the asset owner (relative to this chain)
 		/// - `metadata`: Metadata to include in the instantiated ERC20 contract on Ethereum
+		/// - `fee` The register fee in ether
 		#[pallet::call_index(2)]
 		#[pallet::weight(T::WeightInfo::register_token())]
 		pub fn register_token(
 			origin: OriginFor<T>,
 			asset_id: Box<VersionedLocation>,
+			asset_owner: Box<VersionedLocation>,
 			metadata: AssetMetadata,
 			fee: u128,
 		) -> DispatchResult {
-			let origin_location = match origin.clone().into() {
+			let forward_location = match origin.clone().into() {
 				Ok(RawOrigin::Root) => Ok(Here.into()),
 				_ => T::SiblingOrigin::ensure_origin(origin),
 			}?;
+			let forward_origin = agent_id_of::<T>(&forward_location)?;
 
 			let asset_location: Location =
 				(*asset_id).try_into().map_err(|_| Error::<T>::UnsupportedLocationVersion)?;
+			let asset_owner_location: Location =
+				(*asset_owner).try_into().map_err(|_| Error::<T>::UnsupportedLocationVersion)?;
+			let mut checked = false;
+			if asset_location.eq(&asset_owner_location) ||
+				asset_location.starts_with(&asset_owner_location)
+			{
+				checked = true
+			}
+			ensure!(checked, <Error::<T>>::OwnerCheck);
 
-			let ethereum_location = T::EthereumLocation::get();
 			// reanchor to Ethereum context
-			let location = asset_location
+			let ethereum_location = T::EthereumLocation::get();
+
+			let reanchored_asset_owner_location = asset_owner_location
 				.clone()
 				.reanchored(&ethereum_location, &T::UniversalLocation::get())
 				.map_err(|_| Error::<T>::LocationConversionFailed)?;
+			let asset_owner_origin = agent_id_of::<T>(&reanchored_asset_owner_location)?;
 
-			let token_id = TokenIdOf::convert_location(&location)
+			// Record the token id or fail if it has already been created
+			let reanchored_asset_location = asset_location
+				.clone()
+				.reanchored(&ethereum_location, &T::UniversalLocation::get())
+				.map_err(|_| Error::<T>::LocationConversionFailed)?;
+			let token_id = TokenIdOf::convert_location(&reanchored_asset_location)
 				.ok_or(Error::<T>::LocationConversionFailed)?;
-
 			if !ForeignToNativeId::<T>::contains_key(token_id) {
-				NativeToForeignId::<T>::insert(location.clone(), token_id);
-				ForeignToNativeId::<T>::insert(token_id, location.clone());
+				NativeToForeignId::<T>::insert(reanchored_asset_location.clone(), token_id);
+				ForeignToNativeId::<T>::insert(token_id, reanchored_asset_location.clone());
 			}
 
 			let command = Command::RegisterForeignToken {
@@ -226,24 +238,25 @@ pub mod pallet {
 				symbol: metadata.symbol.into_inner(),
 				decimals: metadata.decimals,
 			};
-			Self::send(origin_location, command, fee)?;
-
+			Self::send(forward_origin, asset_owner_origin, command, fee)?;
 			Self::deposit_event(Event::<T>::RegisterToken {
-				location: location.clone().into(),
+				location: reanchored_asset_location.into(),
 				foreign_token_id: token_id,
 			});
-
 			Ok(())
 		}
 	}
 
 	impl<T: Config> Pallet<T> {
-		/// Send `command` to the Gateway on the Channel identified by `channel_id`
-		fn send(origin_location: Location, command: Command, fee: u128) -> DispatchResult {
-			let origin = agent_id_of::<T>(&origin_location)?;
-
+		/// Send `command` to the Gateway identified by `agent_id`
+		fn send(
+			forward_origin: AgentId,
+			origin: AgentId,
+			command: Command,
+			fee: u128,
+		) -> DispatchResult {
 			let mut message = Message {
-				origin_location,
+				forward_origin,
 				origin,
 				id: Default::default(),
 				fee,

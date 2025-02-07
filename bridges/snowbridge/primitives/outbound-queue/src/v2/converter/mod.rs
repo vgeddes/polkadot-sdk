@@ -122,6 +122,16 @@ where
 			return Err(SendError::NotApplicable)
 		}
 
+		let forward_location = Location::new(1, local_sub.clone());
+
+		let forward_origin = match AgentHashedDescription::convert_location(&forward_location) {
+			Some(id) => id,
+			None => {
+				log::error!(target: TARGET, "unroutable due to not being able to create agent id. '{forward_location:?}'");
+				return Err(SendError::NotApplicable)
+			},
+		};
+
 		let message = message.clone().ok_or_else(|| {
 			log::error!(target: TARGET, "xcm message not provided.");
 			SendError::MissingArgument
@@ -140,7 +150,8 @@ where
 		);
 		ensure!(result.is_err(), SendError::NotApplicable);
 
-		let mut converter = XcmConverter::<ConvertAssetId, ()>::new(&message, expected_network);
+		let mut converter =
+			XcmConverter::<ConvertAssetId, ()>::new(&message, expected_network, forward_origin);
 		let message = converter.convert().map_err(|err| {
 			log::error!(target: TARGET, "unroutable due to pattern matching error '{err:?}'.");
 			SendError::Unroutable

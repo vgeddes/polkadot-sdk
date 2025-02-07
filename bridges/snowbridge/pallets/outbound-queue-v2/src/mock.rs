@@ -146,7 +146,7 @@ where
 	let _marker = PhantomData::<T>; // for clippy
 
 	Message {
-		origin_location: Default::default(),
+		forward_origin: primary_governance_origin(),
 		origin: primary_governance_origin(),
 		id: Default::default(),
 		fee: 0,
@@ -167,7 +167,7 @@ where
 	let _marker = PhantomData::<T>; // for clippy
 
 	Message {
-		origin_location: Default::default(),
+		forward_origin: Default::default(),
 		origin: Default::default(),
 		id: Default::default(),
 		fee: 0,
@@ -185,7 +185,7 @@ where
 
 pub fn mock_message(sibling_para_id: u32) -> Message {
 	Message {
-		origin_location: Default::default(),
+		forward_origin: Default::default(),
 		origin: H256::from_low_u64_be(sibling_para_id as u64),
 		id: H256::from_low_u64_be(1),
 		fee: 1_000,

@@ -39,7 +39,7 @@ where
 	fn deliver(ticket: Self::Ticket) -> Result<H256, SendError> {
 		let origin = AggregateMessageOrigin::SnowbridgeV2(ticket.origin);
 
-		if ticket.origin != primary_governance_origin() {
+		if ticket.forward_origin != primary_governance_origin() {
 			ensure!(!Self::operating_mode().is_halted(), SendError::Halted);
 		}
 
