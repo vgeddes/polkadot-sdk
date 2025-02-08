@@ -24,7 +24,7 @@ use xcm::v5::AssetTransferFilter;
 use xcm_executor::traits::ConvertLocation;
 
 #[test]
-fn send_weth_from_asset_hub_to_ethereum() {
+fn send_weth_and_ether_from_asset_hub_to_ethereum() {
 	fund_on_bh();
 
 	register_assets_on_ah();
@@ -40,9 +40,9 @@ fn send_weth_from_asset_hub_to_ethereum() {
 		let remote_fee_asset =
 			Asset { id: AssetId(ethereum()), fun: Fungible(REMOTE_FEE_AMOUNT_IN_WETH) };
 
-		let reserve_asset = Asset { id: AssetId(weth_location()), fun: Fungible(TOKEN_AMOUNT) };
+		let asset = Asset { id: AssetId(ethereum()), fun: Fungible(TOKEN_AMOUNT) };
 
-		let assets = vec![reserve_asset.clone(), remote_fee_asset.clone(), local_fee_asset.clone()];
+		let assets = vec![asset.clone(), remote_fee_asset.clone(), local_fee_asset.clone()];
 
 		let xcm = VersionedXcm::from(Xcm(vec![
 			WithdrawAsset(assets.clone().into()),
@@ -53,9 +53,7 @@ fn send_weth_from_asset_hub_to_ethereum() {
 					remote_fee_asset.clone().into(),
 				))),
 				preserve_origin: true,
-				assets: vec![AssetTransferFilter::ReserveWithdraw(Definite(
-					reserve_asset.clone().into(),
-				))],
+				assets: vec![AssetTransferFilter::ReserveWithdraw(Definite(asset.clone().into()))],
 				remote_xcm: Xcm(vec![DepositAsset {
 					assets: Wild(AllCounted(2)),
 					beneficiary: beneficiary(),

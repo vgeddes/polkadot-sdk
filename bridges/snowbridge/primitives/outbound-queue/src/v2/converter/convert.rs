@@ -198,6 +198,7 @@ where
 							(0, [AccountKey20 { network, key }])
 								if self.network_matches(network) =>
 								Some((H160(*key), *amount)),
+							(0, []) => Some((H160([0; 20]), *amount)),
 							_ => None,
 						},
 					_ => None,
