@@ -169,17 +169,16 @@ impl TransactAsset for SuccessfulTransactor {
 }
 
 parameter_types! {
-	pub storage WETH: Location = Location::new(
+	pub storage Ether: Location = Location::new(
 				2,
 				[
 					GlobalConsensus(Ethereum { chain_id: 11155111 }),
-					AccountKey20 {
-						network: None,
-						key: hex!("c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"),
-					},
 				],
 	);
 	pub storage DeliveryFee: Asset = (Location::parent(), 80_000_000_000u128).into();
+	pub BridgeHub: Location = Location::new(1,[Parachain(1002)]);
+	pub UniversalLocation: InteriorLocation =
+		[GlobalConsensus(Polkadot), Parachain(1000)].into();
 }
 
 impl crate::Config for Test {
@@ -191,8 +190,10 @@ impl crate::Config for Test {
 	type RegisterTokenOrigin = EnsureXcm<Everything>;
 	type XcmSender = MockXcmSender;
 	type AssetTransactor = SuccessfulTransactor;
-	type FeeAsset = WETH;
+	type FeeAsset = Ether;
 	type DeliveryFee = DeliveryFee;
+	type BridgeHub = BridgeHub;
+	type UniversalLocation = UniversalLocation;
 }
 
 // Build genesis storage according to the mock runtime.

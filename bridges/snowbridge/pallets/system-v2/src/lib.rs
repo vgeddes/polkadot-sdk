@@ -152,29 +152,33 @@ pub mod pallet {
 			location: Box<VersionedLocation>,
 			fee: u128,
 		) -> DispatchResult {
+			// Get forward origin
 			let forward_location = match origin.clone().into() {
 				Ok(RawOrigin::Root) => Ok(Here.into()),
 				_ => T::SiblingOrigin::ensure_origin(origin),
 			}?;
 			let forward_origin = agent_id_of::<T>(&forward_location)?;
 
-			// Agent reanchor to Ethereum context
+			// Agent reanchored to Ethereum context
 			let ethereum_location = T::EthereumLocation::get();
 			let origin_location: Location =
 				(*location).try_into().map_err(|_| Error::<T>::UnsupportedLocationVersion)?;
-			let location = origin_location
+			let reanchored_location = origin_location
 				.clone()
 				.reanchored(&ethereum_location, &T::UniversalLocation::get())
 				.map_err(|_| Error::<T>::LocationConversionFailed)?;
-			let agent_id = agent_id_of::<T>(&location)?;
+			let agent_id = agent_id_of::<T>(&reanchored_location)?;
 
 			// Record the agent id or fail if it has already been created
 			ensure!(!Agents::<T>::contains_key(agent_id), Error::<T>::AgentAlreadyCreated);
 			Agents::<T>::insert(agent_id, ());
 
+			// Send command to outbound queue
 			Self::send(forward_origin, agent_id, Command::CreateAgent {}, fee)?;
-
-			Self::deposit_event(Event::<T>::CreateAgent { location: Box::new(location), agent_id });
+			Self::deposit_event(Event::<T>::CreateAgent {
+				location: Box::new(origin_location),
+				agent_id,
+			});
 			Ok(())
 		}
 
@@ -193,27 +197,21 @@ pub mod pallet {
 			metadata: AssetMetadata,
 			fee: u128,
 		) -> DispatchResult {
+			// Get forward origin
 			let forward_location = match origin.clone().into() {
 				Ok(RawOrigin::Root) => Ok(Here.into()),
 				_ => T::SiblingOrigin::ensure_origin(origin),
 			}?;
 			let forward_origin = agent_id_of::<T>(&forward_location)?;
 
+			// Convert to Location
 			let asset_location: Location =
 				(*asset_id).try_into().map_err(|_| Error::<T>::UnsupportedLocationVersion)?;
 			let asset_owner_location: Location =
 				(*asset_owner).try_into().map_err(|_| Error::<T>::UnsupportedLocationVersion)?;
-			let mut checked = false;
-			if asset_location.eq(&asset_owner_location) ||
-				asset_location.starts_with(&asset_owner_location)
-			{
-				checked = true
-			}
-			ensure!(checked, <Error::<T>>::OwnerCheck);
 
-			// reanchor to Ethereum context
+			// Reanchored token location to Ethereum
 			let ethereum_location = T::EthereumLocation::get();
-
 			let reanchored_asset_owner_location = asset_owner_location
 				.clone()
 				.reanchored(&ethereum_location, &T::UniversalLocation::get())
@@ -232,6 +230,7 @@ pub mod pallet {
 				ForeignToNativeId::<T>::insert(token_id, reanchored_asset_location.clone());
 			}
 
+			// Send command to outbound queue
 			let command = Command::RegisterForeignToken {
 				token_id,
 				name: metadata.name.into_inner(),

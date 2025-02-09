@@ -89,6 +89,10 @@ pub mod pallet {
 
 		type DeliveryFee: Get<Asset>;
 
+		type BridgeHub: Get<Location>;
+
+		type UniversalLocation: Get<InteriorLocation>;
+
 		type WeightInfo: WeightInfo;
 	}
 
@@ -114,6 +118,8 @@ pub mod pallet {
 		Send,
 		/// Withdraw fee asset failure
 		FundsUnavailable,
+		/// Convert to reanchored location failure
+		LocationConversionFailed,
 	}
 
 	#[pallet::call]
@@ -127,10 +133,15 @@ pub mod pallet {
 		pub fn create_agent(origin: OriginFor<T>, fee: u128) -> DispatchResult {
 			let origin_location = T::CreateAgentOrigin::ensure_origin(origin)?;
 
-			Self::burn_fees(origin_location.clone(), fee)?;
+			Self::charge_fees(origin_location.clone(), fee)?;
+
+			let reanchored_location = origin_location
+				.clone()
+				.reanchored(&T::BridgeHub::get(), &T::UniversalLocation::get())
+				.map_err(|_| Error::<T>::LocationConversionFailed)?;
 
 			let call = SnowbridgeControl::Control(ControlCall::CreateAgent {
-				location: Box::new(VersionedLocation::from(origin_location.clone())),
+				location: Box::new(VersionedLocation::from(reanchored_location.clone())),
 				fee,
 			});
 
@@ -169,18 +180,33 @@ pub mod pallet {
 				(*asset_id).try_into().map_err(|_| Error::<T>::UnsupportedLocationVersion)?;
 
 			let mut checked = false;
-			if asset_location.eq(&asset_owner_location) ||
+			if asset_owner_location.eq(&Here.into()) ||
+				asset_location.eq(&asset_owner_location) ||
 				asset_location.starts_with(&asset_owner_location)
 			{
 				checked = true
 			}
 			ensure!(checked, <Error<T>>::OwnerCheck);
 
-			Self::burn_fees(asset_owner_location.clone(), fee)?;
+			if asset_owner_location.clone() != Here.into() {
+				Self::charge_fees(asset_owner_location.clone(), fee)?;
+			}
+
+			let reanchored_asset_owner_location = asset_owner_location
+				.clone()
+				.reanchored(&T::BridgeHub::get(), &T::UniversalLocation::get())
+				.map_err(|_| Error::<T>::LocationConversionFailed)?;
+
+			let reanchored_asset_location = asset_location
+				.clone()
+				.reanchored(&T::BridgeHub::get(), &T::UniversalLocation::get())
+				.map_err(|_| Error::<T>::LocationConversionFailed)?;
 
 			let call = SnowbridgeControl::Control(ControlCall::RegisterToken {
-				asset_id: Box::new(VersionedLocation::from(asset_location.clone())),
-				asset_owner: Box::new(VersionedLocation::from(asset_owner_location.clone())),
+				asset_id: Box::new(VersionedLocation::from(reanchored_asset_location.clone())),
+				asset_owner: Box::new(VersionedLocation::from(
+					reanchored_asset_owner_location.clone(),
+				)),
 				metadata,
 				fee,
 			});
@@ -206,11 +232,10 @@ pub mod pallet {
 
 	impl<T: Config> Pallet<T> {
 		pub fn send(xcm: Xcm<()>) -> DispatchResult {
-			let bridgehub = Location::new(1, [Parachain(1002)]);
-			send_xcm::<T::XcmSender>(bridgehub, xcm).map_err(|_| Error::<T>::Send)?;
+			send_xcm::<T::XcmSender>(T::BridgeHub::get(), xcm).map_err(|_| Error::<T>::Send)?;
 			Ok(())
 		}
-		pub fn burn_fees(origin_location: Location, fee: u128) -> DispatchResult {
+		pub fn charge_fees(origin_location: Location, fee: u128) -> DispatchResult {
 			let ethereum_fee_asset = (T::FeeAsset::get(), fee).into();
 			T::AssetTransactor::withdraw_asset(&ethereum_fee_asset, &origin_location, None)
 				.map_err(|_| Error::<T>::FundsUnavailable)?;

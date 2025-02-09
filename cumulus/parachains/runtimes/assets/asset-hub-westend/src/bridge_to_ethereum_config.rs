@@ -14,11 +14,19 @@
 // You should have received a copy of the GNU General Public License
 // along with Cumulus.  If not, see <http://www.gnu.org/licenses/>.
 
-use crate::{xcm_config::AssetTransactors, Runtime, RuntimeEvent};
-use frame_support::{parameter_types, traits::Everything};
+use crate::{
+	xcm_config::{AssetTransactors, LocalOriginToLocation},
+	Runtime, RuntimeEvent, RuntimeOrigin,
+};
+use frame_support::{
+	parameter_types,
+	traits::{EitherOf, Everything},
+};
 use pallet_xcm::EnsureXcm;
-use xcm::prelude::{Asset, Location};
+use xcm::prelude::{Asset, Location, Parachain};
+use xcm_builder::EnsureXcmOrigin;
 
+use crate::xcm_config::UniversalLocation;
 #[cfg(not(feature = "runtime-benchmarks"))]
 use crate::xcm_config::XcmRouter;
 #[cfg(feature = "runtime-benchmarks")]
@@ -62,6 +70,7 @@ parameter_types! {
 			],
 	);
 	pub storage DeliveryFee: Asset = (Location::parent(), 80_000_000_000u128).into();
+	pub BridgeHub: Location = Location::new(1,[Parachain(westend_runtime_constants::system_parachain::BRIDGE_HUB_ID)]);
 }
 
 impl snowbridge_pallet_system_frontend::Config for Runtime {
@@ -69,8 +78,10 @@ impl snowbridge_pallet_system_frontend::Config for Runtime {
 	type WeightInfo = ();
 	#[cfg(feature = "runtime-benchmarks")]
 	type Helper = ();
-	type CreateAgentOrigin = EnsureXcm<Everything>;
-	type RegisterTokenOrigin = EnsureXcm<Everything>;
+	type CreateAgentOrigin =
+		EitherOf<EnsureXcm<Everything>, EnsureXcmOrigin<RuntimeOrigin, LocalOriginToLocation>>;
+	type RegisterTokenOrigin =
+		EitherOf<EnsureXcm<Everything>, EnsureXcmOrigin<RuntimeOrigin, LocalOriginToLocation>>;
 	#[cfg(not(feature = "runtime-benchmarks"))]
 	type XcmSender = XcmRouter;
 	#[cfg(feature = "runtime-benchmarks")]
@@ -78,4 +89,6 @@ impl snowbridge_pallet_system_frontend::Config for Runtime {
 	type AssetTransactor = AssetTransactors;
 	type FeeAsset = FeeAsset;
 	type DeliveryFee = DeliveryFee;
+	type BridgeHub = BridgeHub;
+	type UniversalLocation = UniversalLocation;
 }
