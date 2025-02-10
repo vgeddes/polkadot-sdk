@@ -6,10 +6,9 @@ use crate::{Config, MessageLeaves};
 use frame_support::storage::StorageStreamIter;
 use snowbridge_merkle_tree::{merkle_proof, MerkleProof};
 use snowbridge_outbound_queue_primitives::v2::{
-	second_governance_origin, DryRunError, GasMeter, Message, OutboundCommandWrapper,
-	OutboundMessage, XcmConverter,
+	DryRunError, GasMeter, Message, OutboundCommandWrapper, OutboundMessage, XcmConverter,
 };
-use sp_core::Get;
+use sp_core::{Get, H256};
 use sp_std::{default::Default, vec::Vec};
 use xcm::prelude::Xcm;
 
@@ -32,7 +31,7 @@ where
 	let mut converter = XcmConverter::<T::ConvertAssetId, ()>::new(
 		&xcm,
 		T::EthereumNetwork::get(),
-		second_governance_origin(),
+		H256::default(),
 	);
 
 	let message: Message = converter.convert().map_err(|_| DryRunError::ConvertXcmFailed)?;

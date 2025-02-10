@@ -36,10 +36,10 @@ use frame_support::{pallet_prelude::*, traits::EnsureOrigin};
 use frame_system::pallet_prelude::*;
 use snowbridge_core::{AgentId, AssetMetadata, TokenId, TokenIdOf};
 use snowbridge_outbound_queue_primitives::{
-	v2::{Command, Message, SendMessage},
+	v2::{Command, Initializer, Message, SendMessage},
 	SendError,
 };
-use sp_core::H256;
+use sp_core::{blake2_256, H160, H256};
 use sp_runtime::traits::MaybeEquivalence;
 use sp_std::prelude::*;
 use xcm::prelude::*;
@@ -68,6 +68,7 @@ where
 pub mod pallet {
 	use super::*;
 	use frame_support::dispatch::RawOrigin;
+	use snowbridge_outbound_queue_primitives::v2::primary_governance_origin;
 
 	#[pallet::pallet]
 	pub struct Pallet<T>(_);
@@ -109,6 +110,8 @@ pub mod pallet {
 			/// ID of Polkadot-native token on Ethereum
 			foreign_token_id: H256,
 		},
+		/// An Upgrade message was sent to the Gateway
+		Upgrade { impl_address: H160, impl_code_hash: H256, initializer_params_hash: Option<H256> },
 	}
 
 	#[pallet::error]
@@ -119,7 +122,7 @@ pub mod pallet {
 		UnsupportedLocationVersion,
 		InvalidLocation,
 		Send(SendError),
-		OwnerCheck,
+		InvalidUpgradeParameters,
 	}
 
 	/// The set of registered agents
@@ -243,6 +246,43 @@ pub mod pallet {
 			Self::deposit_event(Event::<T>::RegisterToken {
 				location: reanchored_asset_location.into(),
 				foreign_token_id: token_id,
+			});
+			Ok(())
+		}
+
+		/// Sends command to the Gateway contract to upgrade itself with a new implementation
+		/// contract
+		///
+		/// Fee required: No
+		///
+		/// - `origin`: Must be `Root`.
+		/// - `impl_address`: The address of the implementation contract.
+		/// - `impl_code_hash`: The codehash of the implementation contract.
+		/// - `initializer`: Optionally call an initializer on the implementation contract.
+		#[pallet::call_index(3)]
+		#[pallet::weight((T::WeightInfo::upgrade(), DispatchClass::Operational))]
+		pub fn upgrade(
+			origin: OriginFor<T>,
+			impl_address: H160,
+			impl_code_hash: H256,
+			initializer: Option<Initializer>,
+		) -> DispatchResult {
+			ensure_root(origin)?;
+
+			ensure!(
+				!impl_address.eq(&H160::zero()) && !impl_code_hash.eq(&H256::zero()),
+				Error::<T>::InvalidUpgradeParameters
+			);
+
+			let initializer_params_hash: Option<H256> =
+				initializer.as_ref().map(|i| H256::from(blake2_256(i.params.as_ref())));
+			let command = Command::Upgrade { impl_address, impl_code_hash, initializer };
+			Self::send(primary_governance_origin(), primary_governance_origin(), command, 0)?;
+
+			Self::deposit_event(Event::<T>::Upgrade {
+				impl_address,
+				impl_code_hash,
+				initializer_params_hash,
 			});
 			Ok(())
 		}

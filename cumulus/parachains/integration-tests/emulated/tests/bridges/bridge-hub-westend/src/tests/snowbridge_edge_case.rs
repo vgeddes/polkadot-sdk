@@ -25,9 +25,7 @@ use snowbridge_core::AssetMetadata;
 use snowbridge_pallet_system::Error;
 use xcm_executor::traits::ConvertLocation;
 
-// The user origin should be banned in ethereum_blob_exporter with error logs
-// xcm::ethereum_blob_exporter: could not get parachain id from universal source
-// 'X2([Parachain(1000), AccountId32 {...}])'
+// The user origin should be banned in ethereum_blob_exporter
 #[test]
 fn user_export_message_from_ah_directly_will_fail() {
 	fund_on_bh();
