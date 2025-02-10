@@ -121,13 +121,13 @@ pub const MAX_COMMANDS: u32 = 8;
 /// A message which can be accepted by implementations of `/[`SendMessage`\]`
 #[derive(Encode, Decode, TypeInfo, PartialEq, Clone, RuntimeDebug)]
 pub struct Message {
-	/// Origin
+	/// The original origin from the source chain
 	pub origin: H256,
-	/// Forwarder(require check on solidity)
+	/// The origin who forward or dispatch the message
 	pub forward_origin: H256,
 	/// ID
 	pub id: H256,
-	/// Fee
+	/// Fee amount in Ether
 	pub fee: u128,
 	/// Commands
 	pub commands: BoundedVec<Command, ConstU32<MAX_COMMANDS>>,
