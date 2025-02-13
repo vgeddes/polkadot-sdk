@@ -94,6 +94,9 @@ pub mod pallet {
 		/// Universal location of this runtime.
 		type UniversalLocation: Get<InteriorLocation>;
 
+		/// The global flag when set to true, all non-governance operations are disabled.
+		type PauseFlag: Get<bool>;
+
 		type WeightInfo: WeightInfo;
 
 		/// A set of helper functions for benchmarking.
@@ -126,6 +129,8 @@ pub mod pallet {
 		FundsUnavailable,
 		/// Convert to reanchored location failure
 		LocationConversionFailed,
+		/// Send non-governance extrinsic when the bridge is halted
+		Halted,
 	}
 
 	#[pallet::call]
@@ -135,6 +140,8 @@ pub mod pallet {
 		#[pallet::call_index(1)]
 		#[pallet::weight(T::WeightInfo::create_agent())]
 		pub fn create_agent(origin: OriginFor<T>, fee: u128) -> DispatchResult {
+			ensure!(!T::PauseFlag::get(), Error::<T>::Halted);
+
 			let origin_location = T::CreateAgentOrigin::ensure_origin(origin)?;
 
 			// Burn Ether Fee for the cost on ethereum
@@ -188,6 +195,8 @@ pub mod pallet {
 			metadata: AssetMetadata,
 			fee: u128,
 		) -> DispatchResult {
+			ensure!(!T::PauseFlag::get(), Error::<T>::Halted);
+
 			let origin_location = T::RegisterTokenOrigin::ensure_origin(origin)?;
 
 			let asset_location: Location =

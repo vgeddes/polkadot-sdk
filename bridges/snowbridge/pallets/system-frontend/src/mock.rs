@@ -199,6 +199,7 @@ parameter_types! {
 	pub BridgeHubLocation: Location = Location::new(1, [Parachain(1002)]);
 	pub UniversalLocation: InteriorLocation =
 		[GlobalConsensus(Polkadot), Parachain(1000)].into();
+	pub storage PauseFlag: bool = false;
 }
 
 impl crate::Config for Test {
@@ -215,6 +216,7 @@ impl crate::Config for Test {
 	type XcmExecutor = MockXcmExecutor;
 	type BridgeHubLocation = BridgeHubLocation;
 	type UniversalLocation = UniversalLocation;
+	type PauseFlag = PauseFlag;
 }
 
 // Build genesis storage according to the mock runtime.
