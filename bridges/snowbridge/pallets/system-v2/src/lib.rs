@@ -111,40 +111,6 @@ pub mod pallet {
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-		/// Sends a command to the Gateway contract to instantiate a new agent contract representing
-		/// `origin`.
-		///
-		/// - `location`: The location representing the agent
-		/// - `fee`: Ether to pay for the execution cost on Ethereum
-		#[pallet::call_index(1)]
-		#[pallet::weight(<T as pallet::Config>::WeightInfo::create_agent())]
-		pub fn create_agent(
-			origin: OriginFor<T>,
-			location: Box<VersionedLocation>,
-			fee: u128,
-		) -> DispatchResult {
-			T::FrontendOrigin::ensure_origin(origin)?;
-
-			let location: Location =
-				(*location).try_into().map_err(|_| Error::<T>::UnsupportedLocationVersion)?;
-
-			let message_origin = Self::location_to_message_origin(&location)?;
-
-			// Record the agent id or fail if it has already been created
-			ensure!(!Agents::<T>::contains_key(message_origin), Error::<T>::AgentAlreadyCreated);
-			Agents::<T>::insert(message_origin, ());
-
-			let command = Command::CreateAgent {};
-
-			Self::send(message_origin, command, fee)?;
-
-			Self::deposit_event(Event::<T>::CreateAgent {
-				location: Box::new(location),
-				agent_id: message_origin,
-			});
-			Ok(())
-		}
-
 		/// Registers a Polkadot-native token as a wrapped ERC20 token on Ethereum.
 		///
 		/// - `asset_id`: Location of the asset (relative to this chain)
@@ -156,7 +122,6 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			asset_id: Box<VersionedLocation>,
 			metadata: AssetMetadata,
-			fee: u128,
 		) -> DispatchResult {
 			let origin_location = T::FrontendOrigin::ensure_origin(origin)?;
 			let message_origin = Self::location_to_message_origin(&origin_location)?;
@@ -180,7 +145,7 @@ pub mod pallet {
 				symbol: metadata.symbol.into_inner(),
 				decimals: metadata.decimals,
 			};
-			Self::send(message_origin, command, fee)?;
+			Self::send(message_origin, command)?;
 
 			Self::deposit_event(Event::<T>::RegisterToken {
 				location: location.clone().into(),
@@ -193,11 +158,11 @@ pub mod pallet {
 
 	impl<T: Config> Pallet<T> {
 		/// Send `command` to the Gateway from a specific origin/agent
-		fn send(origin: H256, command: Command, fee: u128) -> DispatchResult {
+		fn send(origin: H256, command: Command) -> DispatchResult {
 			let mut message = Message {
 				origin,
 				id: Default::default(),
-				fee,
+				fee: Default::default(),
 				commands: BoundedVec::try_from(vec![command]).unwrap(),
 			};
 			let hash = sp_io::hashing::blake2_256(&message.encode());
