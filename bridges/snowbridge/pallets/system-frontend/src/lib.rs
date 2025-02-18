@@ -40,10 +40,8 @@ pub const LOG_TARGET: &str = "snowbridge-system-frontend";
 
 #[derive(Encode, Decode, Debug, PartialEq, Clone, TypeInfo)]
 pub enum EthereumSystemCall {
-	#[codec(index = 1)]
-	CreateAgent { location: Box<VersionedLocation>, fee: u128 },
 	#[codec(index = 2)]
-	RegisterToken { asset_id: Box<VersionedLocation>, metadata: AssetMetadata, fee: u128 },
+	RegisterToken { asset_id: Box<VersionedLocation>, metadata: AssetMetadata },
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -111,8 +109,6 @@ pub mod pallet {
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
-		/// A `CreateAgent` message was sent to Bridge Hub
-		CreateAgent { location: Location, message_id: H256 },
 		/// A message to register a Polkadot-native token was sent to Bridge Hub
 		RegisterToken {
 			/// Location of Polkadot-native token
@@ -150,55 +146,26 @@ pub mod pallet {
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-		/// Call `create_agent` to instantiate a new agent contract representing `origin`.
-		/// - `fee`: Fee in Ether paying for the execution cost on Ethreum
-		#[pallet::call_index(1)]
-		#[pallet::weight(T::WeightInfo::create_agent())]
-		pub fn create_agent(origin: OriginFor<T>, fee: u128) -> DispatchResult {
-			let origin_location = T::CreateAgentOrigin::ensure_origin(origin)?;
-
-			// Burn Ether Fee for the cost on ethereum
-			Self::burn_for_teleport(&origin_location, &(T::EthereumLocation::get(), fee).into())?;
-
-			let reanchored_location = Self::reanchor(&origin_location)?;
-
-			let call = BridgeHubRuntime::EthereumSystem(EthereumSystemCall::CreateAgent {
-				location: Box::new(VersionedLocation::from(reanchored_location.clone())),
-				fee,
-			});
-
-			let message_id = Self::send(origin_location.clone(), Self::build_xcm(&call))?;
-
-			Self::deposit_event(Event::<T>::CreateAgent { location: origin_location, message_id });
-			Ok(())
-		}
-
 		/// Registers a Polkadot-native token as a wrapped ERC20 token on Ethereum.
 		/// - `asset_id`: Location of the asset (should starts from the dispatch origin)
 		/// - `metadata`: Metadata to include in the instantiated ERC20 contract on Ethereum
-		/// - `fee`: Fee in Ether paying for the execution cost on Ethreum
 		#[pallet::call_index(2)]
 		#[pallet::weight(T::WeightInfo::register_token())]
 		pub fn register_token(
 			origin: OriginFor<T>,
 			asset_id: Box<VersionedLocation>,
-			metadata: AssetMetadata,
-			fee: u128,
+			metadata: Box<AssetMetadata>,
 		) -> DispatchResult {
 			let asset_location: Location =
 				(*asset_id).try_into().map_err(|_| Error::<T>::UnsupportedLocationVersion)?;
 
 			let origin_location = T::RegisterTokenOrigin::ensure_origin(origin, &asset_location)?;
 
-			// Burn Ether Fee for the cost on ethereum
-			Self::burn_for_teleport(&origin_location, &(T::EthereumLocation::get(), fee).into())?;
-
 			let reanchored_asset_location = Self::reanchor(&asset_location)?;
 
 			let call = BridgeHubRuntime::EthereumSystem(EthereumSystemCall::RegisterToken {
 				asset_id: Box::new(VersionedLocation::from(reanchored_asset_location.clone())),
-				metadata,
-				fee,
+				metadata: (*metadata).clone(),
 			});
 
 			let message_id = Self::send(origin_location.clone(), Self::build_xcm(&call))?;
@@ -220,17 +187,6 @@ pub mod pallet {
 				)?;
 			T::XcmExecutor::charge_fees(origin, price).map_err(|_| Error::<T>::FeesNotMet)?;
 			Ok(message_id.into())
-		}
-
-		fn burn_for_teleport(origin: &Location, fee: &Asset) -> DispatchResult {
-			let dummy_context =
-				XcmContext { origin: None, message_id: Default::default(), topic: None };
-			T::AssetTransactor::can_check_out(origin, fee, &dummy_context)
-				.map_err(|_| Error::<T>::FeesNotMet)?;
-			T::AssetTransactor::check_out(origin, fee, &dummy_context);
-			T::AssetTransactor::withdraw_asset(fee, origin, None)
-				.map_err(|_| Error::<T>::FeesNotMet)?;
-			Ok(())
 		}
 
 		fn build_xcm(call: &impl Encode) -> Xcm<()> {
