@@ -20,7 +20,6 @@ use super::{
 	ToRococoXcmRouter, TransactionByteFee, TrustBackedAssetsInstance, Uniques, WeightToFee,
 	XcmpQueue,
 };
-use crate::xcm_config::bridging::to_ethereum::PauseFlag;
 use assets_common::{
 	matching::{FromSiblingParachain, IsForeignConcreteAsset, ParentLocation},
 	TrustBackedAssetsAsLocation,
@@ -501,7 +500,7 @@ pub type XcmRouter = WithUniqueTopic<(
 	// Router which wraps and sends xcm to BridgeHub to be delivered to the Ethereum
 	// GlobalConsensus with a pausable flag, if the flag is set true then the Router is paused
 	PausableExporter<
-		PauseFlag,
+		crate::SnowbridgeSystemFrontend,
 		SovereignPaidRemoteExporter<
 			(
 				bridging::to_ethereum::EthereumNetworkExportTableV2,
@@ -726,8 +725,6 @@ pub mod bridging {
 			pub EthereumBridgeTableV2: sp_std::vec::Vec<NetworkExportTableItem> = sp_std::vec::Vec::new().into_iter()
 				.chain(BridgeTableV2::get())
 				.collect();
-
-			pub storage PauseFlag: bool = false;
 		}
 
 		pub type EthereumNetworkExportTableV2 =

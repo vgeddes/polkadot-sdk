@@ -23,3 +23,7 @@ impl BasicOperatingMode {
 		*self == BasicOperatingMode::Halted
 	}
 }
+
+pub trait IsHalted {
+	fn is_halted() -> bool;
+}

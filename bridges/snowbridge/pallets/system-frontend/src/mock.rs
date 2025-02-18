@@ -202,7 +202,6 @@ parameter_types! {
 	pub BridgeHubLocation: Location = Location::new(1, [Parachain(1002)]);
 	pub UniversalLocation: InteriorLocation =
 		[GlobalConsensus(Polkadot), Parachain(1000)].into();
-	pub storage PauseFlag: bool = false;
 	pub PalletLocation: InteriorLocation = [PalletInstance(80)].into();
 }
 
@@ -219,7 +218,6 @@ impl crate::Config for Test {
 	type XcmExecutor = MockXcmExecutor;
 	type BridgeHubLocation = BridgeHubLocation;
 	type UniversalLocation = UniversalLocation;
-	type PauseFlag = PauseFlag;
 	type PalletLocation = PalletLocation;
 }
 

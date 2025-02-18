@@ -25,7 +25,7 @@ use frame_support::{
 	traits::{EnsureOrigin, EnsureOriginWithArg},
 };
 use frame_system::pallet_prelude::*;
-use snowbridge_core::AssetMetadata;
+use snowbridge_core::{operating_mode::IsHalted, AssetMetadata, BasicOperatingMode};
 use sp_core::H256;
 use sp_std::prelude::*;
 use xcm::prelude::*;
@@ -98,8 +98,6 @@ pub mod pallet {
 		/// Universal location of this runtime.
 		type UniversalLocation: Get<InteriorLocation>;
 
-		/// The global flag when set to true, all non-governance operations are disabled.
-		type PauseFlag: Get<bool>;
 		/// InteriorLocation of this pallet.
 		type PalletLocation: Get<InteriorLocation>;
 
@@ -121,6 +119,8 @@ pub mod pallet {
 			location: Location,
 			message_id: H256,
 		},
+		/// Set OperatingMode
+		OperatingModeChanged { mode: BasicOperatingMode },
 	}
 
 	#[pallet::error]
@@ -152,14 +152,31 @@ pub mod pallet {
 		}
 	}
 
+	/// The current operating mode of the pallet.
+	#[pallet::storage]
+	#[pallet::getter(fn operating_mode)]
+	pub type OperatingMode<T: Config> = StorageValue<_, BasicOperatingMode, ValueQuery>;
+
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
+		/// Halt or resume all pallet operations. May only be called by root.
+		#[pallet::call_index(0)]
+		#[pallet::weight((T::DbWeight::get().reads_writes(1, 1), DispatchClass::Operational))]
+		pub fn set_operating_mode(
+			origin: OriginFor<T>,
+			mode: BasicOperatingMode,
+		) -> DispatchResult {
+			ensure_root(origin)?;
+			OperatingMode::<T>::put(mode);
+			Self::deposit_event(Event::OperatingModeChanged { mode });
+			Ok(())
+		}
 		/// Call `create_agent` to instantiate a new agent contract representing `origin`.
 		/// - `fee`: Fee in Ether paying for the execution cost on Ethreum
 		#[pallet::call_index(1)]
 		#[pallet::weight(T::WeightInfo::create_agent())]
 		pub fn create_agent(origin: OriginFor<T>, fee: u128) -> DispatchResult {
-			ensure!(!T::PauseFlag::get(), Error::<T>::Halted);
+			ensure!(!Self::operating_mode().is_halted(), Error::<T>::Halted);
 
 			let origin_location = T::CreateAgentOrigin::ensure_origin(origin)?;
 
@@ -191,7 +208,7 @@ pub mod pallet {
 			metadata: AssetMetadata,
 			fee: u128,
 		) -> DispatchResult {
-			ensure!(!T::PauseFlag::get(), Error::<T>::Halted);
+			ensure!(!Self::operating_mode().is_halted(), Error::<T>::Halted);
 
 			let asset_location: Location =
 				(*asset_id).try_into().map_err(|_| Error::<T>::UnsupportedLocationVersion)?;
@@ -258,6 +275,12 @@ pub mod pallet {
 				.clone()
 				.reanchored(&T::BridgeHubLocation::get(), &T::UniversalLocation::get())
 				.map_err(|_| Error::<T>::LocationConversionFailed)
+		}
+	}
+
+	impl<T: Config> IsHalted for Pallet<T> {
+		fn is_halted() -> bool {
+			Self::operating_mode().is_halted()
 		}
 	}
 }
