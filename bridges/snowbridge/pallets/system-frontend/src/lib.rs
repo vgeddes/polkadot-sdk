@@ -20,11 +20,13 @@ mod benchmarking;
 pub mod weights;
 pub use weights::*;
 
-use frame_support::{pallet_prelude::*, traits::EnsureOrigin};
+use frame_support::{
+	pallet_prelude::*,
+	traits::{EnsureOrigin, EnsureOriginWithArg},
+};
 use frame_system::pallet_prelude::*;
 use snowbridge_core::AssetMetadata;
 use sp_core::H256;
-use sp_io::hashing::blake2_256;
 use sp_std::prelude::*;
 use xcm::prelude::*;
 use xcm_executor::traits::TransactAsset;
@@ -33,6 +35,8 @@ use xcm_executor::traits::TransactAsset;
 use frame_support::traits::OriginTrait;
 
 pub use pallet::*;
+
+pub const LOG_TARGET: &str = "snowbridge-system-frontend";
 
 #[derive(Encode, Decode, Debug, PartialEq, Clone, TypeInfo)]
 pub enum EthereumSystemCall {
@@ -70,9 +74,12 @@ pub mod pallet {
 		/// Origin check for XCM locations that can create agents
 		type CreateAgentOrigin: EnsureOrigin<Self::RuntimeOrigin, Success = Location>;
 
-		/// Origin check for XCM locations that can create agents
-		type RegisterTokenOrigin: EnsureOrigin<Self::RuntimeOrigin, Success = Location>;
-
+		/// Origin check for XCM locations that can register token
+		type RegisterTokenOrigin: EnsureOriginWithArg<
+			Self::RuntimeOrigin,
+			Location,
+			Success = Location,
+		>;
 		/// XCM message sender
 		type XcmSender: SendXcm;
 
@@ -83,10 +90,7 @@ pub mod pallet {
 		type XcmExecutor: ExecuteXcm<Self::RuntimeCall>;
 
 		/// Fee asset for the execution cost on ethereum
-		type FeeAsset: Get<Location>;
-
-		/// RemoteExecutionFee for the execution cost on bridge hub
-		type RemoteExecutionFee: Get<Asset>;
+		type EthereumLocation: Get<Location>;
 
 		/// Location of bridge hub
 		type BridgeHubLocation: Get<Location>;
@@ -96,6 +100,8 @@ pub mod pallet {
 
 		/// The global flag when set to true, all non-governance operations are disabled.
 		type PauseFlag: Get<bool>;
+		/// InteriorLocation of this pallet.
+		type PalletLocation: Get<InteriorLocation>;
 
 		type WeightInfo: WeightInfo;
 
@@ -124,13 +130,26 @@ pub mod pallet {
 		/// Check location failure, should start from the dispatch origin as owner
 		InvalidAssetOwner,
 		/// Send xcm message failure
-		Send,
+		SendFailure,
 		/// Withdraw fee asset failure
-		FundsUnavailable,
+		FeesNotMet,
 		/// Convert to reanchored location failure
 		LocationConversionFailed,
 		/// Send non-governance extrinsic when the bridge is halted
 		Halted,
+		/// The desired destination was unreachable, generally because there is a no way of routing
+		/// to it.
+		Unreachable,
+	}
+
+	impl<T: Config> From<SendError> for Error<T> {
+		fn from(e: SendError) -> Self {
+			match e {
+				SendError::Fees => Error::<T>::FeesNotMet,
+				SendError::NotApplicable => Error::<T>::Unreachable,
+				_ => Error::<T>::SendFailure,
+			}
+		}
 	}
 
 	#[pallet::call]
@@ -145,39 +164,16 @@ pub mod pallet {
 			let origin_location = T::CreateAgentOrigin::ensure_origin(origin)?;
 
 			// Burn Ether Fee for the cost on ethereum
-			Self::burn_for_teleport(&origin_location, &(T::FeeAsset::get(), fee).into())?;
+			Self::burn_for_teleport(&origin_location, &(T::EthereumLocation::get(), fee).into())?;
 
-			// Burn RemoteExecutionFee for the cost on bridge hub
-			Self::burn_for_teleport(&origin_location, &T::RemoteExecutionFee::get())?;
-
-			let reanchored_location = origin_location
-				.clone()
-				.reanchored(&T::BridgeHubLocation::get(), &T::UniversalLocation::get())
-				.map_err(|_| Error::<T>::LocationConversionFailed)?;
+			let reanchored_location = Self::reanchor(&origin_location)?;
 
 			let call = BridgeHubRuntime::EthereumSystem(EthereumSystemCall::CreateAgent {
 				location: Box::new(VersionedLocation::from(reanchored_location.clone())),
 				fee,
 			});
 
-			let topic = blake2_256(&("SnowbridgeFrontend", call.clone()).encode());
-
-			let xcm: Xcm<()> = vec![
-				// Burn some DOT fees from the origin on AH and teleport to BH which pays for
-				// the execution of Transacts on BH.
-				ReceiveTeleportedAsset(T::RemoteExecutionFee::get().into()),
-				PayFees { asset: T::RemoteExecutionFee::get() },
-				Transact {
-					origin_kind: OriginKind::Xcm,
-					call: call.encode().into(),
-					fallback_max_weight: None,
-				},
-				ExpectTransactStatus(MaybeErrorCode::Success),
-				SetTopic(topic),
-			]
-			.into();
-
-			let message_id = Self::send(origin_location.clone(), xcm)?;
+			let message_id = Self::send(origin_location.clone(), Self::build_xcm(&call))?;
 
 			Self::deposit_event(Event::<T>::CreateAgent { location: origin_location, message_id });
 			Ok(())
@@ -197,21 +193,15 @@ pub mod pallet {
 		) -> DispatchResult {
 			ensure!(!T::PauseFlag::get(), Error::<T>::Halted);
 
-			let origin_location = T::RegisterTokenOrigin::ensure_origin(origin)?;
-
 			let asset_location: Location =
 				(*asset_id).try_into().map_err(|_| Error::<T>::UnsupportedLocationVersion)?;
 
+			let origin_location = T::RegisterTokenOrigin::ensure_origin(origin, &asset_location)?;
+
 			// Burn Ether Fee for the cost on ethereum
-			Self::burn_for_teleport(&origin_location, &(T::FeeAsset::get(), fee).into())?;
+			Self::burn_for_teleport(&origin_location, &(T::EthereumLocation::get(), fee).into())?;
 
-			// Burn RemoteExecutionFee for the cost on bridge hub
-			Self::burn_for_teleport(&origin_location, &T::RemoteExecutionFee::get())?;
-
-			let reanchored_asset_location = asset_location
-				.clone()
-				.reanchored(&T::BridgeHubLocation::get(), &T::UniversalLocation::get())
-				.map_err(|_| Error::<T>::LocationConversionFailed)?;
+			let reanchored_asset_location = Self::reanchor(&asset_location)?;
 
 			let call = BridgeHubRuntime::EthereumSystem(EthereumSystemCall::RegisterToken {
 				asset_id: Box::new(VersionedLocation::from(reanchored_asset_location.clone())),
@@ -219,22 +209,7 @@ pub mod pallet {
 				fee,
 			});
 
-			let topic = blake2_256(&("SnowbridgeFrontend", call.clone()).encode());
-
-			let xcm: Xcm<()> = vec![
-				ReceiveTeleportedAsset(T::RemoteExecutionFee::get().into()),
-				PayFees { asset: T::RemoteExecutionFee::get() },
-				Transact {
-					origin_kind: OriginKind::Xcm,
-					call: call.encode().into(),
-					fallback_max_weight: None,
-				},
-				ExpectTransactStatus(MaybeErrorCode::Success),
-				SetTopic(topic),
-			]
-			.into();
-
-			let message_id = Self::send(origin_location.clone(), xcm)?;
+			let message_id = Self::send(origin_location.clone(), Self::build_xcm(&call))?;
 
 			Self::deposit_event(Event::<T>::RegisterToken { location: asset_location, message_id });
 
@@ -243,28 +218,46 @@ pub mod pallet {
 	}
 
 	impl<T: Config> Pallet<T> {
-		pub fn send(origin: Location, xcm: Xcm<()>) -> Result<H256, Error<T>> {
-			let bridgehub = T::BridgeHubLocation::get();
-			let (hash, price) =
-				send_xcm::<T::XcmSender>(bridgehub, xcm).map_err(|_| Error::<T>::Send)?;
-
-			T::XcmExecutor::charge_fees(origin, price).map_err(|_| Error::<T>::FundsUnavailable)?;
-
-			Ok(hash.into())
+		fn send(origin: Location, xcm: Xcm<()>) -> Result<H256, Error<T>> {
+			let (message_id, price) =
+				send_xcm::<T::XcmSender>(T::BridgeHubLocation::get(), xcm.clone()).map_err(
+					|err| {
+						tracing::error!(target: LOG_TARGET, ?err, ?xcm, "XCM send failed with error");
+						Error::<T>::from(err)
+					},
+				)?;
+			T::XcmExecutor::charge_fees(origin, price).map_err(|_| Error::<T>::FeesNotMet)?;
+			Ok(message_id.into())
 		}
 
-		pub fn burn_for_teleport(origin: &Location, fee: &Asset) -> DispatchResult {
+		fn burn_for_teleport(origin: &Location, fee: &Asset) -> DispatchResult {
 			let dummy_context =
 				XcmContext { origin: None, message_id: Default::default(), topic: None };
-
 			T::AssetTransactor::can_check_out(origin, fee, &dummy_context)
-				.map_err(|_| Error::<T>::FundsUnavailable)?;
+				.map_err(|_| Error::<T>::FeesNotMet)?;
 			T::AssetTransactor::check_out(origin, fee, &dummy_context);
-
 			T::AssetTransactor::withdraw_asset(fee, origin, None)
-				.map_err(|_| Error::<T>::FundsUnavailable)?;
-
+				.map_err(|_| Error::<T>::FeesNotMet)?;
 			Ok(())
+		}
+
+		fn build_xcm(call: &impl Encode) -> Xcm<()> {
+			Xcm(vec![
+				DescendOrigin(T::PalletLocation::get()),
+				UnpaidExecution { weight_limit: Unlimited, check_origin: None },
+				Transact {
+					origin_kind: OriginKind::Xcm,
+					call: call.encode().into(),
+					fallback_max_weight: None,
+				},
+			])
+		}
+		/// Reanchors `location` relative to BridgeHub.
+		fn reanchor(location: &Location) -> Result<Location, Error<T>> {
+			location
+				.clone()
+				.reanchored(&T::BridgeHubLocation::get(), &T::UniversalLocation::get())
+				.map_err(|_| Error::<T>::LocationConversionFailed)
 		}
 	}
 }
