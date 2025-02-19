@@ -13,6 +13,7 @@ pub mod operating_mode;
 pub mod pricing;
 pub mod reward;
 pub mod ringbuffer;
+pub mod reward;
 pub mod sparse_bitmap;
 
 pub use location::{AgentId, AgentIdOf, TokenId, TokenIdOf};

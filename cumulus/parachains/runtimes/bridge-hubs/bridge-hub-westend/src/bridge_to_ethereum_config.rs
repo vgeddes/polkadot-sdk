@@ -46,7 +46,7 @@ use sp_runtime::{
 	traits::{ConstU32, ConstU8, Keccak256},
 	FixedU128,
 };
-use xcm::prelude::{GlobalConsensus, InteriorLocation, Location, PalletInstance, Parachain};
+use xcm::prelude::{GlobalConsensus, InteriorLocation, Location, Parachain, PalletInstance, Junction};
 use xcm_executor::XcmExecutor;
 
 pub const SLOTS_PER_EPOCH: u32 = snowbridge_pallet_ethereum_client::config::SLOTS_PER_EPOCH as u32;
@@ -84,10 +84,14 @@ parameter_types! {
 		multiplier: FixedU128::from_rational(1, 1),
 	};
 	pub AssetHubFromEthereum: Location = Location::new(1,[GlobalConsensus(RelayNetwork::get()),Parachain(westend_runtime_constants::system_parachain::ASSET_HUB_ID)]);
+	pub AssetHubLocation: Location = Location::new(1,[Parachain(westend_runtime_constants::system_parachain::ASSET_HUB_ID)]);
 	pub EthereumUniversalLocation: InteriorLocation = [GlobalConsensus(EthereumNetwork::get())].into();
 	pub InboundQueueLocation: InteriorLocation = [PalletInstance(INBOUND_QUEUE_PALLET_INDEX_V2)].into();
 	pub SnowbridgeFrontendLocation: Location = Location::new(1,[Parachain(westend_runtime_constants::system_parachain::ASSET_HUB_ID),PalletInstance(FRONTEND_PALLET_INDEX)]);
 	pub AssethubLocation: Location = Location::new(1,[Parachain(westend_runtime_constants::system_parachain::ASSET_HUB_ID)]);
+	pub EthereumGlobalLocation: Location = Location::new(2, [GlobalConsensus(RelayNetwork::get())]);
+	pub AssetHubXCMFee: u128 = 1_000_000_000u128;
+	pub InboundQueueLocation: InteriorLocation = [PalletInstance(84)].into();
 }
 
 impl snowbridge_pallet_inbound_queue::Config for Runtime {
