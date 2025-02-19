@@ -34,7 +34,7 @@ pub use weights::*;
 
 use frame_support::{pallet_prelude::*, traits::EnsureOrigin};
 use frame_system::pallet_prelude::*;
-use snowbridge_core::{AgentId, AgentIdOf, AssetMetadata, TokenId, TokenIdOf};
+use snowbridge_core::{AgentIdOf as LocationHashOf, AssetMetadata, TokenId, TokenIdOf};
 use snowbridge_outbound_queue_primitives::{
 	v2::{Command, Initializer, Message, SendMessage},
 	OperatingMode, SendError,
@@ -46,16 +46,14 @@ use sp_std::prelude::*;
 use xcm::prelude::*;
 use xcm_executor::traits::ConvertLocation;
 
+use snowbridge_pallet_system::{Agents, ForeignToNativeId, NativeToForeignId};
+
 #[cfg(feature = "runtime-benchmarks")]
 use frame_support::traits::OriginTrait;
 
 pub use pallet::*;
 
 pub type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
-
-pub fn agent_id_of<T: Config>(location: &Location) -> Result<H256, DispatchError> {
-	T::AgentIdOf::convert_location(location).ok_or(Error::<T>::LocationConversionFailed.into())
-}
 
 #[cfg(feature = "runtime-benchmarks")]
 pub trait BenchmarkHelper<O>
@@ -73,23 +71,17 @@ pub mod pallet {
 	pub struct Pallet<T>(_);
 
 	#[pallet::config]
-	pub trait Config: frame_system::Config {
+	pub trait Config: frame_system::Config + snowbridge_pallet_system::Config {
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
 		/// Send messages to Ethereum
 		type OutboundQueue: SendMessage;
 
 		/// Origin check for XCM locations that transact with this pallet
-		type SiblingOrigin: EnsureOrigin<Self::RuntimeOrigin, Success = Location>;
+		type FrontendOrigin: EnsureOrigin<Self::RuntimeOrigin, Success = Location>;
 
-		/// Converts Location to AgentId
-		type AgentIdOf: ConvertLocation<AgentId>;
-
-		/// This chain's Universal Location.
-		type UniversalLocation: Get<InteriorLocation>;
-
-		/// The bridges configured Ethereum location
-		type EthereumLocation: Get<Location>;
+		/// Origin for governance calls
+		type GovernanceOrigin: EnsureOrigin<Self::RuntimeOrigin, Success = Location>;
 
 		type WeightInfo: WeightInfo;
 		#[cfg(feature = "runtime-benchmarks")]
@@ -100,7 +92,7 @@ pub mod pallet {
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
 		/// An CreateAgent message was sent to the Gateway
-		CreateAgent { location: Box<Location>, agent_id: AgentId },
+		CreateAgent { location: Box<Location>, agent_id: H256 },
 		/// Register Polkadot-native token as a wrapped ERC20 token on Ethereum
 		RegisterToken {
 			/// Location of Polkadot-native token
@@ -116,6 +108,7 @@ pub mod pallet {
 
 	#[pallet::error]
 	pub enum Error<T> {
+		LocationReanchorFailed,
 		LocationConversionFailed,
 		AgentAlreadyCreated,
 		NoAgent,
@@ -125,21 +118,6 @@ pub mod pallet {
 		InvalidUpgradeParameters,
 	}
 
-	/// The set of registered agents
-	#[pallet::storage]
-	#[pallet::getter(fn agents)]
-	pub type Agents<T: Config> = StorageMap<_, Twox64Concat, AgentId, (), OptionQuery>;
-
-	/// Lookup table for foreign token ID to native location relative to ethereum
-	#[pallet::storage]
-	pub type ForeignToNativeId<T: Config> =
-		StorageMap<_, Blake2_128Concat, TokenId, xcm::v5::Location, OptionQuery>;
-
-	/// Lookup table for native location relative to ethereum to foreign token ID
-	#[pallet::storage]
-	pub type NativeToForeignId<T: Config> =
-		StorageMap<_, Blake2_128Concat, xcm::v5::Location, TokenId, OptionQuery>;
-
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
 		/// Sends a command to the Gateway contract to instantiate a new agent contract representing
@@ -148,37 +126,30 @@ pub mod pallet {
 		/// - `location`: The location representing the agent
 		/// - `fee`: Ether to pay for the execution cost on Ethereum
 		#[pallet::call_index(1)]
-		#[pallet::weight(T::WeightInfo::create_agent())]
+		#[pallet::weight(<T as pallet::Config>::WeightInfo::create_agent())]
 		pub fn create_agent(
 			origin: OriginFor<T>,
 			location: Box<VersionedLocation>,
 			fee: u128,
 		) -> DispatchResult {
-			T::SiblingOrigin::ensure_origin(origin)?;
+			T::FrontendOrigin::ensure_origin(origin)?;
 
-			let origin_location: Location =
+			let location: Location =
 				(*location).try_into().map_err(|_| Error::<T>::UnsupportedLocationVersion)?;
 
-			// reanchor to Ethereum context
-			let ethereum_location = T::EthereumLocation::get();
-			let reanchored_location = origin_location
-				.clone()
-				.reanchored(&ethereum_location, &T::UniversalLocation::get())
-				.map_err(|_| Error::<T>::LocationConversionFailed)?;
-
-			let agent_id = agent_id_of::<T>(&reanchored_location)?;
+			let message_origin = Self::location_to_message_origin(&location)?;
 
 			// Record the agent id or fail if it has already been created
-			ensure!(!Agents::<T>::contains_key(agent_id), Error::<T>::AgentAlreadyCreated);
-			Agents::<T>::insert(agent_id, ());
+			ensure!(!Agents::<T>::contains_key(message_origin), Error::<T>::AgentAlreadyCreated);
+			Agents::<T>::insert(message_origin, ());
 
 			let command = Command::CreateAgent {};
 
-			Self::send(agent_id, command, fee)?;
+			Self::send(message_origin, command, fee)?;
 
 			Self::deposit_event(Event::<T>::CreateAgent {
-				location: Box::new(origin_location),
-				agent_id,
+				location: Box::new(location),
+				agent_id: message_origin,
 			});
 			Ok(())
 		}
@@ -189,26 +160,20 @@ pub mod pallet {
 		/// - `metadata`: Metadata to include in the instantiated ERC20 contract on Ethereum
 		/// - `fee`: Ether to pay for the execution cost on Ethereum
 		#[pallet::call_index(2)]
-		#[pallet::weight(T::WeightInfo::register_token())]
+		#[pallet::weight(<T as pallet::Config>::WeightInfo::register_token())]
 		pub fn register_token(
 			origin: OriginFor<T>,
 			asset_id: Box<VersionedLocation>,
 			metadata: AssetMetadata,
 			fee: u128,
 		) -> DispatchResult {
-			let origin_location = T::SiblingOrigin::ensure_origin(origin)?;
-			let origin = AgentIdOf::convert_location(&origin_location)
-				.ok_or(Error::<T>::LocationConversionFailed)?;
+			let origin_location = T::FrontendOrigin::ensure_origin(origin)?;
+			let message_origin = Self::location_to_message_origin(&origin_location)?;
 
 			let asset_location: Location =
 				(*asset_id).try_into().map_err(|_| Error::<T>::UnsupportedLocationVersion)?;
 
-			let ethereum_location = T::EthereumLocation::get();
-			// reanchor to Ethereum context
-			let location = asset_location
-				.clone()
-				.reanchored(&ethereum_location, &T::UniversalLocation::get())
-				.map_err(|_| Error::<T>::LocationConversionFailed)?;
+			let location = Self::reanchor(&asset_location)?;
 
 			let token_id = TokenIdOf::convert_location(&location)
 				.ok_or(Error::<T>::LocationConversionFailed)?;
@@ -224,7 +189,7 @@ pub mod pallet {
 				symbol: metadata.symbol.into_inner(),
 				decimals: metadata.decimals,
 			};
-			Self::send(origin, command, fee)?;
+			Self::send(message_origin, command, fee)?;
 
 			Self::deposit_event(Event::<T>::RegisterToken {
 				location: location.clone().into(),
@@ -244,16 +209,15 @@ pub mod pallet {
 		/// - `impl_code_hash`: The codehash of the implementation contract.
 		/// - `initializer`: Optionally call an initializer on the implementation contract.
 		#[pallet::call_index(3)]
-		#[pallet::weight((T::WeightInfo::upgrade(), DispatchClass::Operational))]
+		#[pallet::weight((<T as pallet::Config>::WeightInfo::upgrade(), DispatchClass::Operational))]
 		pub fn upgrade(
 			origin: OriginFor<T>,
 			impl_address: H160,
 			impl_code_hash: H256,
 			initializer: Option<Initializer>,
 		) -> DispatchResult {
-			ensure_root(origin)?;
-
-			let origin = Self::governance_origin()?;
+			let origin_location = T::GovernanceOrigin::ensure_origin(origin)?;
+			let origin = Self::location_to_message_origin(&origin_location)?;
 
 			ensure!(
 				!impl_address.eq(&H160::zero()) && !impl_code_hash.eq(&H256::zero()),
@@ -280,11 +244,10 @@ pub mod pallet {
 		///
 		/// - `origin`: Must be `Root`
 		#[pallet::call_index(4)]
-		#[pallet::weight((T::WeightInfo::set_operating_mode(), DispatchClass::Operational))]
+		#[pallet::weight((<T as pallet::Config>::WeightInfo::set_operating_mode(), DispatchClass::Operational))]
 		pub fn set_operating_mode(origin: OriginFor<T>, mode: OperatingMode) -> DispatchResult {
-			ensure_root(origin)?;
-
-			let origin = Self::governance_origin()?;
+			let origin_location = T::GovernanceOrigin::ensure_origin(origin)?;
+			let origin = Self::location_to_message_origin(&origin_location)?;
 
 			let command = Command::SetOperatingMode { mode };
 			Self::send(origin, command, 0)?;
@@ -296,7 +259,7 @@ pub mod pallet {
 
 	impl<T: Config> Pallet<T> {
 		/// Send `command` to the Gateway from a specific origin/agent
-		fn send(origin: AgentId, command: Command, fee: u128) -> DispatchResult {
+		fn send(origin: H256, command: Command, fee: u128) -> DispatchResult {
 			let mut message = Message {
 				origin,
 				id: Default::default(),
@@ -306,15 +269,26 @@ pub mod pallet {
 			let hash = sp_io::hashing::blake2_256(&message.encode());
 			message.id = hash.into();
 
-			let (ticket, _) =
-				T::OutboundQueue::validate(&message).map_err(|err| Error::<T>::Send(err))?;
+			let (ticket, _) = <T as pallet::Config>::OutboundQueue::validate(&message)
+				.map_err(|err| Error::<T>::Send(err))?;
 
-			T::OutboundQueue::deliver(ticket).map_err(|err| Error::<T>::Send(err))?;
+			<T as pallet::Config>::OutboundQueue::deliver(ticket)
+				.map_err(|err| Error::<T>::Send(err))?;
 			Ok(())
 		}
 
-		fn governance_origin() -> Result<AgentId, Error<T>> {
-			AgentIdOf::convert_location(&Here.into()).ok_or(Error::<T>::LocationConversionFailed)
+		/// Reanchor the `location` in context of ethereum
+		fn reanchor(location: &Location) -> Result<Location, Error<T>> {
+			location
+				.clone()
+				.reanchored(&T::EthereumLocation::get(), &T::UniversalLocation::get())
+				.map_err(|_| Error::<T>::LocationReanchorFailed)
+		}
+
+		pub fn location_to_message_origin(location: &Location) -> Result<H256, Error<T>> {
+			let reanchored_location = Self::reanchor(location)?;
+			LocationHashOf::convert_location(&reanchored_location)
+				.ok_or(Error::<T>::LocationConversionFailed)
 		}
 	}
 

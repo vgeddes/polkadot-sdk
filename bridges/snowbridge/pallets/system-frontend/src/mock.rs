@@ -3,7 +3,10 @@
 use crate as snowbridge_system_frontend;
 use crate::mock::pallet_xcm_origin::EnsureXcm;
 use codec::Encode;
-use frame_support::{derive_impl, parameter_types, traits::Everything};
+use frame_support::{
+	derive_impl, parameter_types,
+	traits::{AsEnsureOriginWithArg, Everything},
+};
 use sp_core::H256;
 use sp_runtime::{
 	traits::{BlakeTwo256, IdentityLookup},
@@ -199,6 +202,7 @@ parameter_types! {
 	pub BridgeHubLocation: Location = Location::new(1, [Parachain(1002)]);
 	pub UniversalLocation: InteriorLocation =
 		[GlobalConsensus(Polkadot), Parachain(1000)].into();
+	pub PalletLocation: InteriorLocation = [PalletInstance(80)].into();
 }
 
 impl crate::Config for Test {
@@ -207,14 +211,14 @@ impl crate::Config for Test {
 	#[cfg(feature = "runtime-benchmarks")]
 	type Helper = ();
 	type CreateAgentOrigin = EnsureXcm<Everything>;
-	type RegisterTokenOrigin = EnsureXcm<Everything>;
+	type RegisterTokenOrigin = AsEnsureOriginWithArg<EnsureXcm<Everything>>;
 	type XcmSender = MockXcmSender;
 	type AssetTransactor = SuccessfulTransactor;
-	type FeeAsset = Ether;
-	type RemoteExecutionFee = DeliveryFee;
+	type EthereumLocation = Ether;
 	type XcmExecutor = MockXcmExecutor;
 	type BridgeHubLocation = BridgeHubLocation;
 	type UniversalLocation = UniversalLocation;
+	type PalletLocation = PalletLocation;
 }
 
 // Build genesis storage according to the mock runtime.
