@@ -55,10 +55,10 @@ use snowbridge_inbound_queue_primitives::{
 use sp_core::H160;
 use xcm::prelude::{ExecuteXcm, Junction::*, Location, SendXcm, *};
 
+use frame_support::sp_runtime::SaturatedConversion;
+use pallet_bridge_relayers::RewardLedger;
 #[cfg(feature = "runtime-benchmarks")]
 use {snowbridge_beacon_primitives::BeaconHeader, sp_core::H256};
-use pallet_bridge_relayers::RewardLedger;
-use frame_support::sp_runtime::SaturatedConversion;
 
 pub use pallet::*;
 
@@ -203,7 +203,10 @@ pub mod pallet {
 	pub type OperatingMode<T: Config> = StorageValue<_, BasicOperatingMode, ValueQuery>;
 
 	#[pallet::call]
-	impl<T: Config> Pallet<T> where T::AccountId: Into<Location> {
+	impl<T: Config> Pallet<T>
+	where
+		T::AccountId: Into<Location>,
+	{
 		/// Submit an inbound message originating from the Gateway contract on Ethereum
 		#[pallet::call_index(0)]
 		#[pallet::weight(T::WeightInfo::submit())]
@@ -236,7 +239,10 @@ pub mod pallet {
 		}
 	}
 
-	impl<T: Config> Pallet<T> where T::AccountId: Into<Location> {
+	impl<T: Config> Pallet<T>
+	where
+		T::AccountId: Into<Location>,
+	{
 		pub fn process_message(relayer: T::AccountId, message: Message) -> DispatchResult {
 			// Verify that the message was submitted from the known Gateway contract
 			ensure!(T::GatewayAddress::get() == message.gateway, Error::<T>::InvalidGateway);
@@ -256,7 +262,11 @@ pub mod pallet {
 				})?;
 
 			// Pay relayer reward
-			T::RewardPayment::register_reward(&relayer, T::DefaultRewardKind::get(), message.relayer_fee.saturated_into::<BalanceOf<T>>());
+			T::RewardPayment::register_reward(
+				&relayer,
+				T::DefaultRewardKind::get(),
+				message.relayer_fee.saturated_into::<BalanceOf<T>>(),
+			);
 
 			// Mark message as received
 			Nonce::<T>::set(message.nonce.into());

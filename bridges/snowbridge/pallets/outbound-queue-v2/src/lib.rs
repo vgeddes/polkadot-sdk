@@ -77,9 +77,14 @@ use bridge_hub_common::{AggregateMessageOrigin, CustomDigestItem};
 use codec::Decode;
 use frame_support::{
 	storage::StorageStreamIter,
-	traits::{tokens::Balance, EnqueueMessage, Get, ProcessMessageError},
+	traits::{
+		fungible::{Inspect, Mutate},
+		tokens::Balance,
+		EnqueueMessage, Get, ProcessMessageError,
+	},
 	weights::{Weight, WeightToFee},
 };
+use pallet_bridge_relayers::RewardLedger;
 use snowbridge_core::{BasicOperatingMode, TokenId};
 use snowbridge_merkle_tree::merkle_root;
 use snowbridge_outbound_queue_primitives::{
@@ -92,20 +97,16 @@ use snowbridge_outbound_queue_primitives::{
 use sp_core::{H160, H256};
 use sp_runtime::{
 	traits::{BlockNumberProvider, Hash, MaybeEquivalence},
-	DigestItem,
+	DigestItem, SaturatedConversion,
 };
 use sp_std::prelude::*;
 pub use types::{PendingOrder, ProcessMessageOriginOf};
 pub use weights::WeightInfo;
 use xcm::latest::{Location, NetworkId};
-use frame_support::traits::fungible::Inspect;
-use frame_support::traits::fungible::Mutate;
-use pallet_bridge_relayers::RewardLedger;
-use sp_runtime::SaturatedConversion;
 type DeliveryReceiptOf<T> = DeliveryReceipt<<T as frame_system::Config>::AccountId>;
 
 type BalanceOf<T> =
-<<T as pallet::Config>::Token as Inspect<<T as frame_system::Config>::AccountId>>::Balance;
+	<<T as pallet::Config>::Token as Inspect<<T as frame_system::Config>::AccountId>>::Balance;
 
 pub use pallet::*;
 
@@ -308,7 +309,11 @@ pub mod pallet {
 
 			if order.fee > 0 {
 				// Pay relayer reward
-				T::RewardPayment::register_reward(&relayer, T::DefaultRewardKind::get(), order.fee.saturated_into::<BalanceOf<T>>());
+				T::RewardPayment::register_reward(
+					&relayer,
+					T::DefaultRewardKind::get(),
+					order.fee.saturated_into::<BalanceOf<T>>(),
+				);
 			}
 
 			<PendingOrders<T>>::remove(nonce);
