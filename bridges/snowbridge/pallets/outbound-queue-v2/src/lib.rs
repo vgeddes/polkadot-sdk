@@ -80,7 +80,7 @@ use frame_support::{
 	traits::{tokens::Balance, EnqueueMessage, Get, ProcessMessageError},
 	weights::{Weight, WeightToFee},
 };
-use snowbridge_core::{ether_asset, BasicOperatingMode, TokenId};
+use snowbridge_core::{BasicOperatingMode, TokenId};
 use snowbridge_merkle_tree::merkle_root;
 use snowbridge_outbound_queue_primitives::{
 	v2::{
@@ -98,8 +98,14 @@ use sp_std::prelude::*;
 pub use types::{PendingOrder, ProcessMessageOriginOf};
 pub use weights::WeightInfo;
 use xcm::latest::{Location, NetworkId};
-
+use frame_support::traits::fungible::Inspect;
+use frame_support::traits::fungible::Mutate;
+use pallet_bridge_relayers::RewardLedger;
+use sp_runtime::SaturatedConversion;
 type DeliveryReceiptOf<T> = DeliveryReceipt<<T as frame_system::Config>::AccountId>;
+
+type BalanceOf<T> =
+<<T as pallet::Config>::Token as Inspect<<T as frame_system::Config>::AccountId>>::Balance;
 
 pub use pallet::*;
 
@@ -145,13 +151,18 @@ pub mod pallet {
 		/// Address of the Gateway contract
 		#[pallet::constant]
 		type GatewayAddress: Get<H160>;
-
-		/// Means of paying a relayer
-		type RewardPayment: PaymentProcedure<Self::AccountId>;
+		/// Reward discriminator type.
+		type RewardKind: Parameter + MaxEncodedLen + Send + Sync + Copy + Clone;
+		#[pallet::constant]
+		type DefaultRewardKind: Get<Self::RewardKind>;
+		/// Relayer Reward Payment
+		type RewardPayment: RewardLedger<Self::AccountId, Self::RewardKind, BalanceOf<Self>>;
+		/// Ethereum NetworkId
 
 		type ConvertAssetId: MaybeEquivalence<TokenId, Location>;
 
 		type EthereumNetwork: Get<NetworkId>;
+		type Token: Mutate<Self::AccountId> + Inspect<Self::AccountId>;
 	}
 
 	#[pallet::event]
@@ -278,7 +289,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			event: Box<EventProof>,
 		) -> DispatchResult {
-			ensure_signed(origin)?;
+			let relayer = ensure_signed(origin)?;
 			ensure!(!Self::operating_mode().is_halted(), Error::<T>::Halted);
 
 			// submit message to verifier for verification
@@ -296,9 +307,8 @@ pub mod pallet {
 			let order = <PendingOrders<T>>::get(nonce).ok_or(Error::<T>::InvalidPendingNonce)?;
 
 			if order.fee > 0 {
-				let ether = ether_asset(T::EthereumNetwork::get(), order.fee);
-				//T::RewardPayment::pay_reward(receipt.reward_address, ether)
-				//	.map_err(|_| Error::<T>::RewardPaymentFailed)?;
+				// Pay relayer reward
+				T::RewardPayment::register_reward(&relayer, T::DefaultRewardKind::get(), order.fee.saturated_into::<BalanceOf<T>>());
 			}
 
 			<PendingOrders<T>>::remove(nonce);

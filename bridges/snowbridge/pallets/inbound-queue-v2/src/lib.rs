@@ -57,6 +57,8 @@ use xcm::prelude::{ExecuteXcm, Junction::*, Location, SendXcm, *};
 
 #[cfg(feature = "runtime-benchmarks")]
 use {snowbridge_beacon_primitives::BeaconHeader, sp_core::H256};
+use pallet_bridge_relayers::RewardLedger;
+use frame_support::sp_runtime::SaturatedConversion;
 
 pub use pallet::*;
 
@@ -67,6 +69,7 @@ type BalanceOf<T> =
 	<<T as pallet::Config>::Token as Inspect<<T as frame_system::Config>::AccountId>>::Balance;
 
 pub type Nonce<T> = SparseBitmapImpl<crate::NonceBitmap<T>>;
+
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
@@ -92,8 +95,6 @@ pub mod pallet {
 		type XcmSender: SendXcm;
 		/// Handler for XCM fees.
 		type XcmExecutor: ExecuteXcm<Self::RuntimeCall>;
-		/// Relayer Reward Payment
-		type RewardPayment: RewardLedger;
 		/// Ethereum NetworkId
 		type EthereumNetwork: Get<NetworkId>;
 		/// Address of the Gateway contract.
@@ -107,6 +108,12 @@ pub mod pallet {
 		type Helper: BenchmarkHelper<Self>;
 		/// Used for the dry run API implementation.
 		type Balance: Balance + From<u128>;
+		/// Reward discriminator type.
+		type RewardKind: Parameter + MaxEncodedLen + Send + Sync + Copy + Clone;
+		#[pallet::constant]
+		type DefaultRewardKind: Get<Self::RewardKind>;
+		/// Relayer Reward Payment
+		type RewardPayment: RewardLedger<Self::AccountId, Self::RewardKind, BalanceOf<Self>>;
 		type WeightInfo: WeightInfo;
 		/// Convert a weight value into deductible balance type.
 		type WeightToFee: WeightToFee<Balance = BalanceOf<Self>>;
@@ -163,8 +170,6 @@ pub mod pallet {
 		InvalidAsset,
 		/// Cannot reachor a foreign ERC-20 asset location.
 		CannotReanchor,
-		/// Reward payment Failure
-		RewardPaymentFailed,
 		/// Message verification error
 		Verification(VerificationError),
 	}
@@ -251,9 +256,7 @@ pub mod pallet {
 				})?;
 
 			// Pay relayer reward
-			//let ether = ether_asset(T::EthereumNetwork::get(), message.relayer_fee);
-			//T::RewardPayment::pay_reward(relayer, ether)
-			//	.map_err(|_| Error::<T>::RewardPaymentFailed)?;
+			T::RewardPayment::register_reward(&relayer, T::DefaultRewardKind::get(), message.relayer_fee.saturated_into::<BalanceOf<T>>());
 
 			// Mark message as received
 			Nonce::<T>::set(message.nonce.into());

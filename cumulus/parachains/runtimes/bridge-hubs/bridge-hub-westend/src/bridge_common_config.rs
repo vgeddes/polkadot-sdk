@@ -28,10 +28,7 @@ use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::parameter_types;
 use scale_info::TypeInfo;
 use xcm::VersionedLocation;
-use scale_info::TypeInfo;
-use xcm::opaque::latest::Location;
 use snowbridge_core::reward::NoOpReward;
-use crate::bridge_to_ethereum_config::EthereumGlobalLocation;
 use crate::bridge_to_ethereum_config::AssetHubXCMFee;
 use crate::xcm_config::XcmConfig;
 use xcm_executor::XcmExecutor;
@@ -40,6 +37,7 @@ use crate::XcmRouter;
 use crate::bridge_to_ethereum_config::InboundQueueLocation;
 use testnet_parachains_constants::westend::snowbridge::EthereumLocation;
 use crate::bridge_to_ethereum_config::AssetHubLocation;
+use xcm::opaque::latest::Location;
 
 parameter_types! {
 	pub storage RequiredStakeForStakeAndSlash: Balance = 1_000_000;
@@ -107,26 +105,27 @@ impl bp_relayers::PaymentProcedure<AccountId, BridgeReward, u128> for BridgeRewa
 				}
 			},
 			BridgeReward::Snowbridge => {
-				frame_support::ensure!(
-					alternative_beneficiary.is_some(),
-					Self::Error::Other("`alternative_beneficiary` should be specified for `Snowbridge` rewards!")
-				);
-				snowbridge_core::reward::PayAccountOnLocation::<
-					AccountId,
-					u128,
-					NoOpReward,
-					EthereumLocation,
-					//EthereumGlobalLocation,
-					AssetHubLocation,
-					AssetHubXCMFee,
-					InboundQueueLocation,
-					XcmRouter,
-					XcmExecutor<XcmConfig>,
-					RuntimeCall
-				>::pay_reward(
-					relayer, NoOpReward, reward, alternative_beneficiary
-				)
-			} //Relayer, RewardBalance, NoOpReward, EthereumLocation, AssetHubLocation, AssetHubXCMFee, InboundQueueLocation, XcmSender, XcmExecutor, Call
+				match beneficiary {
+					BridgeRewardBeneficiaries::LocalAccount(_) => Err(Self::Error::Other("`LocalAccount` beneficiary is not supported for `Snowbridge` rewards!")),
+					BridgeRewardBeneficiaries::AssetHubLocation(account_location) => {
+						snowbridge_core::reward::PayAccountOnLocation::<
+							AccountId,
+							u128,
+							NoOpReward,
+							EthereumLocation,
+							//EthereumGlobalLocation,
+							AssetHubLocation,
+							AssetHubXCMFee,
+							InboundQueueLocation,
+							XcmRouter,
+							XcmExecutor<XcmConfig>,
+							RuntimeCall
+						>::pay_reward(
+							relayer, NoOpReward, reward, Location::try_from(account_location).unwrap()
+						)
+					}
+				}
+			}
 		}
 	}
 }
