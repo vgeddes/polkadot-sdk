@@ -110,9 +110,10 @@ pub mod pallet {
 		type Balance: Balance + From<u128>;
 		/// Reward discriminator type.
 		type RewardKind: Parameter + MaxEncodedLen + Send + Sync + Copy + Clone;
+		/// The default RewardKind discriminator for rewards allocated to relayers from this pallet.
 		#[pallet::constant]
 		type DefaultRewardKind: Get<Self::RewardKind>;
-		/// Relayer Reward Payment
+		/// Relayer reward payment.
 		type RewardPayment: RewardLedger<Self::AccountId, Self::RewardKind, BalanceOf<Self>>;
 		type WeightInfo: WeightInfo;
 		/// Convert a weight value into deductible balance type.

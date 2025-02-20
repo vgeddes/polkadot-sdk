@@ -154,15 +154,14 @@ pub mod pallet {
 		type GatewayAddress: Get<H160>;
 		/// Reward discriminator type.
 		type RewardKind: Parameter + MaxEncodedLen + Send + Sync + Copy + Clone;
+		/// The default RewardKind discriminator for rewards allocated to relayers from this pallet.
 		#[pallet::constant]
 		type DefaultRewardKind: Get<Self::RewardKind>;
-		/// Relayer Reward Payment
+		/// Relayer reward payment.
 		type RewardPayment: RewardLedger<Self::AccountId, Self::RewardKind, BalanceOf<Self>>;
 		/// Ethereum NetworkId
-
-		type ConvertAssetId: MaybeEquivalence<TokenId, Location>;
-
 		type EthereumNetwork: Get<NetworkId>;
+		type ConvertAssetId: MaybeEquivalence<TokenId, Location>;
 		type Token: Mutate<Self::AccountId> + Inspect<Self::AccountId>;
 	}
 

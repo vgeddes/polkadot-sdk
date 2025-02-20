@@ -35,7 +35,7 @@ use xcm_executor::XcmExecutor;
 use crate::RuntimeCall;
 use crate::XcmRouter;
 use crate::bridge_to_ethereum_config::InboundQueueLocation;
-use testnet_parachains_constants::westend::snowbridge::EthereumLocation;
+use testnet_parachains_constants::westend::snowbridge::EthereumNetwork;
 use crate::bridge_to_ethereum_config::AssetHubLocation;
 use xcm::opaque::latest::Location;
 
@@ -112,8 +112,7 @@ impl bp_relayers::PaymentProcedure<AccountId, BridgeReward, u128> for BridgeRewa
 							AccountId,
 							u128,
 							NoOpReward,
-							EthereumLocation,
-							//EthereumGlobalLocation,
+							EthereumNetwork,
 							AssetHubLocation,
 							AssetHubXCMFee,
 							InboundQueueLocation,
