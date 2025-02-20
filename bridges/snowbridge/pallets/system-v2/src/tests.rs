@@ -36,7 +36,7 @@ fn agent_id_from_location() {
 		);
 		let agent_id = EthereumSystemV2::location_to_message_origin(&origin).unwrap();
 		let expected_agent_id =
-			hex_literal::hex!("6be45a5822eca69502b722ee5130497d63f0358edba9f0dde28e94e152a74742")
+			hex_literal::hex!("fa2d646322a1c6db25dd004f44f14f3d39a9556bed9655f372942a84a5b3d93b")
 				.into();
 		assert_eq!(agent_id, expected_agent_id);
 	});
