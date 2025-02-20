@@ -35,7 +35,6 @@ use sp_runtime::{
 	generic::{Era, SignedPayload},
 	AccountId32,
 };
-use testnet_parachains_constants::westend::snowbridge::WETHAddress;
 
 parameter_types! {
 		pub const DefaultBridgeHubEthereumBaseFee: Balance = 2_750_872_500_000;
