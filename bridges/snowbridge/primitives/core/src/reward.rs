@@ -37,22 +37,17 @@ for PayAccountOnLocation<Relayer, RewardBalance, NoOpReward, EthereumLocation, A
         Call: Decode + GetDispatchInfo,
 {
     type Error = DispatchError;
-    type AlternativeBeneficiary = Location;
+    type Beneficiary = Location;
 
     fn pay_reward(
         relayer: &Relayer,
         _reward_kind: NoOpReward,
         reward: RewardBalance,
-        alternative_beneficiary: Option<Self::AlternativeBeneficiary>,
+        beneficiary: Self::Beneficiary,
     ) -> Result<(), Self::Error> {
         let reward_unit: u128 = reward.into();
         let reward_asset: Asset = (EthereumLocation::get(), reward_unit).into();
         let fee_asset: Asset = (EthereumLocation::get(), AssetHubXCMFee::get()).into();
-        let beneficiary = alternative_beneficiary
-            .unwrap_or_else(|| {
-                let beneficiary_acc: sp_runtime::AccountId32 = (relayer.clone()).into();
-               Location::new(0, [AccountId32{ network: None, id: beneficiary_acc.into()}])
-            });
 
         let xcm: Xcm<()> = alloc::vec![
             RefundSurplus,
@@ -73,4 +68,17 @@ for PayAccountOnLocation<Relayer, RewardBalance, NoOpReward, EthereumLocation, A
 
         Ok(())
     }
+}
+
+/// XCM asset descriptor for native ether relative to AH
+pub fn ether_asset(network: NetworkId, value: u128) -> Asset {
+    (
+        Location::new(
+            2,
+            [
+                GlobalConsensus(network),
+            ],
+        ),
+        value
+    ).into()
 }

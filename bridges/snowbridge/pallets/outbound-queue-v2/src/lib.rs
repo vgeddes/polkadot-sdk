@@ -80,7 +80,7 @@ use frame_support::{
 	traits::{tokens::Balance, EnqueueMessage, Get, ProcessMessageError},
 	weights::{Weight, WeightToFee},
 };
-use snowbridge_core::{ether_asset, BasicOperatingMode, PaymentProcedure, TokenId};
+use snowbridge_core::{ether_asset, BasicOperatingMode, TokenId};
 use snowbridge_merkle_tree::merkle_root;
 use snowbridge_outbound_queue_primitives::{
 	v2::{
@@ -297,8 +297,8 @@ pub mod pallet {
 
 			if order.fee > 0 {
 				let ether = ether_asset(T::EthereumNetwork::get(), order.fee);
-				T::RewardPayment::pay_reward(receipt.reward_address, ether)
-					.map_err(|_| Error::<T>::RewardPaymentFailed)?;
+				//T::RewardPayment::pay_reward(receipt.reward_address, ether)
+				//	.map_err(|_| Error::<T>::RewardPaymentFailed)?;
 			}
 
 			<PendingOrders<T>>::remove(nonce);

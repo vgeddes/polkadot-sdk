@@ -4,6 +4,7 @@
 
 use crate::{CallIndex, EthereumLocationsConverterFor};
 use codec::{Decode, Encode};
+use codec::DecodeWithMemTracking;
 use core::marker::PhantomData;
 use frame_support::{traits::tokens::Balance as BalanceT, PalletError};
 use scale_info::TypeInfo;

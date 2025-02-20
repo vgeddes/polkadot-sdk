@@ -45,7 +45,6 @@ use frame_support::{
 };
 use frame_system::ensure_signed;
 use snowbridge_core::{
-	reward::{ether_asset, PaymentProcedure},
 	sparse_bitmap::{SparseBitmap, SparseBitmapImpl},
 	BasicOperatingMode,
 };
@@ -94,7 +93,7 @@ pub mod pallet {
 		/// Handler for XCM fees.
 		type XcmExecutor: ExecuteXcm<Self::RuntimeCall>;
 		/// Relayer Reward Payment
-		type RewardPayment: PaymentProcedure<Self::AccountId>;
+		type RewardPayment: RewardLedger;
 		/// Ethereum NetworkId
 		type EthereumNetwork: Get<NetworkId>;
 		/// Address of the Gateway contract.
@@ -252,9 +251,9 @@ pub mod pallet {
 				})?;
 
 			// Pay relayer reward
-			let ether = ether_asset(T::EthereumNetwork::get(), message.relayer_fee);
-			T::RewardPayment::pay_reward(relayer, ether)
-				.map_err(|_| Error::<T>::RewardPaymentFailed)?;
+			//let ether = ether_asset(T::EthereumNetwork::get(), message.relayer_fee);
+			//T::RewardPayment::pay_reward(relayer, ether)
+			//	.map_err(|_| Error::<T>::RewardPaymentFailed)?;
 
 			// Mark message as received
 			Nonce::<T>::set(message.nonce.into());

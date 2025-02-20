@@ -41,6 +41,8 @@ snowbridge-core = { workspace = true }
 snowbridge-pallet-inbound-queue-fixtures-v2 = { optional = true, workspace = true }
 snowbridge-inbound-queue-primitives = { workspace = true }
 
+pallet-bridge-relayers = { workspace = true }
+
 [dev-dependencies]
 frame-benchmarking = { workspace = true, default-features = true }
 hex = { workspace = true, default-features = true }

@@ -25517,6 +25517,7 @@ dependencies = [
  "hex-literal",
  "log",
  "pallet-balances 28.0.0",
+ "pallet-bridge-relayers 0.7.0",
  "parity-scale-codec",
  "scale-info",
  "serde",
