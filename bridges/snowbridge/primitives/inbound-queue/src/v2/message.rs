@@ -84,8 +84,7 @@ impl core::fmt::Debug for IGatewayV2::Xcm {
 pub enum XcmCommand {
 	/// Represents raw XCM bytes
 	Raw(Vec<u8>),
-
-	/// A “token registration” template
+	/// A token registration template
 	TokenRegistration { token: H160, network: u8 },
 }
 
