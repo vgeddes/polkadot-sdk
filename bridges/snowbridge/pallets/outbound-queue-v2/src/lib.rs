@@ -299,27 +299,7 @@ pub mod pallet {
 			let receipt = DeliveryReceiptOf::<T>::try_from(&event.event_log)
 				.map_err(|_| Error::<T>::InvalidEnvelope)?;
 
-			// Verify that the message was submitted from the known Gateway contract
-			ensure!(T::GatewayAddress::get() == receipt.gateway, Error::<T>::InvalidGateway);
-
-			let nonce = receipt.nonce;
-
-			let order = <PendingOrders<T>>::get(nonce).ok_or(Error::<T>::InvalidPendingNonce)?;
-
-			if order.fee > 0 {
-				// Pay relayer reward
-				T::RewardPayment::register_reward(
-					&relayer,
-					T::DefaultRewardKind::get(),
-					order.fee.saturated_into::<BalanceOf<T>>(),
-				);
-			}
-
-			<PendingOrders<T>>::remove(nonce);
-
-			Self::deposit_event(Event::MessageDeliveryProofReceived { nonce });
-
-			Ok(())
+			Self::do_process_delivery_receipt(relayer, receipt)
 		}
 	}
 
@@ -417,6 +397,34 @@ pub mod pallet {
 			Self::deposit_event(Event::MessageAccepted { id: message.id, nonce });
 
 			Ok(true)
+		}
+
+		/// Process a delivery receipt from a relayer, to allocate the relayer reward.
+		pub fn do_process_delivery_receipt(
+			relayer: <T as frame_system::Config>::AccountId,
+			receipt: DeliveryReceiptOf<T> ,
+		) -> DispatchResult where <T as frame_system::Config>::AccountId: From<[u8; 32]> {
+			// Verify that the message was submitted from the known Gateway contract
+			ensure!(T::GatewayAddress::get() == receipt.gateway, Error::<T>::InvalidGateway);
+
+			let nonce = receipt.nonce;
+
+			let order = <PendingOrders<T>>::get(nonce).ok_or(Error::<T>::InvalidPendingNonce)?;
+
+			if order.fee > 0 {
+				// Pay relayer reward
+				T::RewardPayment::register_reward(
+					&relayer,
+					T::DefaultRewardKind::get(),
+					order.fee.saturated_into::<BalanceOf<T>>(),
+				);
+			}
+
+			<PendingOrders<T>>::remove(nonce);
+
+			Self::deposit_event(Event::MessageDeliveryProofReceived { nonce });
+
+			Ok(())
 		}
 
 		/// The local component of the message processing fees in native currency
