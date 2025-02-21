@@ -486,6 +486,25 @@ fn transact_with_agent_from_asset_hub() {
 			BridgeHubWestend,
 			vec![RuntimeEvent::EthereumOutboundQueueV2(snowbridge_pallet_outbound_queue_v2::Event::MessageQueued{ .. }) => {},]
 		);
+
+		let relayer = BridgeHubWestendSender::get();
+		let reward_account = AssetHubWestendReceiver::get();
+		let receipt = DeliveryReceipt {
+			gateway: EthereumGatewayAddress::get(),
+			nonce: 1,
+			reward_address: reward_account,
+			success: true,
+		};
+
+		// Submit a delivery receipt
+		assert_ok!(EthereumOutboundQueueV2::do_process_delivery_receipt(relayer, receipt));
+
+		assert_expected_events!(
+			BridgeHubWestend,
+			vec![
+				RuntimeEvent::BridgeRelayers(pallet_bridge_relayers::Event::RewardRegistered { .. }) => {},
+			]
+		);
 	});
 }
 
