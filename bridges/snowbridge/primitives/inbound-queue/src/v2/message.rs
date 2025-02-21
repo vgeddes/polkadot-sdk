@@ -2,17 +2,16 @@
 // SPDX-FileCopyrightText: 2023 Snowfork <hello@snowfork.com>
 //! Converts messages from Ethereum to XCM messages
 
+use crate::{v2::LOG_TARGET, Log};
+use alloy_core::{
+	primitives::B256,
+	sol,
+	sol_types::{SolEvent, SolType},
+};
 use codec::{Decode, Encode};
 use scale_info::TypeInfo;
 use sp_core::{RuntimeDebug, H160, H256};
 use sp_std::prelude::*;
-use alloy_core::{
-	sol,
-	primitives::B256,
-	sol_types::{SolEvent, SolType},
-};
-use crate::Log;
-use crate::v2::LOG_TARGET;
 
 sol! {
 	interface IGatewayV2 {
@@ -28,10 +27,18 @@ sol! {
 			uint8 kind;
 			bytes data;
 		}
+		struct Xcm {
+			uint8 kind;
+			bytes data;
+		}
+		struct TokenRegistration {
+			address token;
+			uint8 network;
+		}
 		struct Payload {
 			address origin;
 			EthereumAsset[] assets;
-			bytes xcm;
+			Xcm xcm;
 			bytes claimer;
 			uint128 value;
 			uint128 executionFee;
@@ -64,6 +71,24 @@ impl core::fmt::Debug for IGatewayV2::EthereumAsset {
 	}
 }
 
+impl core::fmt::Debug for IGatewayV2::Xcm {
+	fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+		f.debug_struct("Xcm")
+			.field("kind", &self.kind)
+			.field("data", &self.data)
+			.finish()
+	}
+}
+
+#[derive(Clone, Encode, Decode, RuntimeDebug, TypeInfo)]
+pub enum XcmCommand {
+	/// Represents raw XCM bytes
+	Raw(Vec<u8>),
+
+	/// A “token registration” template
+	TokenRegistration { token: H160, network: u8 },
+}
+
 /// The ethereum side sends messages which are transcoded into XCM on BH. These messages are
 /// self-contained, in that they can be transcoded using only information in the message.
 #[derive(Clone, Encode, Decode, RuntimeDebug, TypeInfo)]
@@ -77,7 +102,7 @@ pub struct Message {
 	/// The assets sent from Ethereum (ERC-20s).
 	pub assets: Vec<EthereumAsset>,
 	/// The command originating from the Gateway contract.
-	pub xcm: Vec<u8>,
+	pub xcm: XcmCommand,
 	/// The claimer in the case that funds get trapped. Expected to be an XCM::v5::Location.
 	pub claimer: Option<Vec<u8>>,
 	/// Native ether bridged over from Ethereum
@@ -120,16 +145,15 @@ impl TryFrom<&Log> for Message {
 		let mut substrate_assets = vec![];
 
 		// Decode the Solidity event from raw logs
-		let event = IGatewayV2::OutboundMessageAccepted::decode_raw_log(topics, &log.data, true).map_err(
-			|decode_err| {
+		let event = IGatewayV2::OutboundMessageAccepted::decode_raw_log(topics, &log.data, true)
+			.map_err(|decode_err| {
 				log::debug!(
 					target: LOG_TARGET,
 					"decode message error {:?}",
 					decode_err
 				);
 				MessageDecodeError
-			},
-		)?;
+			})?;
 
 		let payload = event.payload;
 
@@ -151,15 +175,17 @@ impl TryFrom<&Log> for Message {
 					});
 				},
 				1 => {
-					let foreign_data = IGatewayV2::AsForeignTokenERC20::abi_decode(&asset.data, true)
-						.map_err(|decode_err| {
-							log::debug!(
-								target: LOG_TARGET,
-								"decode foreign asset error {:?}",
-								decode_err
-							);
-							MessageDecodeError
-						})?;
+					let foreign_data =
+						IGatewayV2::AsForeignTokenERC20::abi_decode(&asset.data, true).map_err(
+							|decode_err| {
+								log::debug!(
+									target: LOG_TARGET,
+									"decode foreign asset error {:?}",
+									decode_err
+								);
+								MessageDecodeError
+							},
+						)?;
 					substrate_assets.push(EthereumAsset::ForeignTokenERC20 {
 						token_id: H256::from(foreign_data.token_id.as_ref()),
 						value: foreign_data.value,
@@ -168,6 +194,26 @@ impl TryFrom<&Log> for Message {
 				_ => return Err(MessageDecodeError),
 			}
 		}
+
+		let xcm = match payload.xcm.kind {
+			0 => XcmCommand::Raw(payload.xcm.data.to_vec()),
+			1 => {
+				let reg = IGatewayV2::TokenRegistration::abi_decode(&payload.xcm.data, true)
+					.map_err(|decode_err| {
+						log::debug!(
+							target: LOG_TARGET,
+							"decode token registration error: {:?}",
+							decode_err
+						);
+						MessageDecodeError
+					})?;
+				XcmCommand::TokenRegistration {
+					token: H160::from(reg.token.as_ref()),
+					network: reg.network,
+				}
+			},
+			_ => return Err(MessageDecodeError),
+		};
 
 		let mut claimer = None;
 		if payload.claimer.len() > 0 {
@@ -179,7 +225,7 @@ impl TryFrom<&Log> for Message {
 			nonce: event.nonce,
 			origin: H160::from(payload.origin.as_ref()),
 			assets: substrate_assets,
-			xcm: payload.xcm.to_vec(),
+			xcm,
 			claimer,
 			value: payload.value,
 			execution_fee: payload.executionFee,
@@ -210,9 +256,6 @@ mod tests {
 		let message = result.unwrap();
 
 		assert_eq!(H160::from(hex!("b8ea8cb425d85536b158d661da1ef0895bb92f1d")), message.gateway);
-		assert_eq!(
-			H160::from(hex!("B8EA8cB425d85536b158d661da1ef0895Bb92F1D")),
-			message.origin
-		);
+		assert_eq!(H160::from(hex!("B8EA8cB425d85536b158d661da1ef0895Bb92F1D")), message.origin);
 	}
 }
