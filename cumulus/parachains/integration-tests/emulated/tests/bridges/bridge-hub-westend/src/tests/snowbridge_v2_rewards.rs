@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::tests::snowbridge_common::set_up_eth_and_dot_pool;
+use crate::tests::snowbridge_common::{eth_location, set_up_eth_and_dot_pool};
 use bridge_hub_westend_runtime::bridge_common_config::{BridgeReward, BridgeRewardBeneficiaries};
 use pallet_bridge_relayers::RewardLedger;
 
@@ -27,6 +27,7 @@ fn claim_rewards_works() {
 	let assethub_sovereign = BridgeHubWestend::sovereign_account_id_of(assethub_location);
 
 	let relayer_account = BridgeHubWestendSender::get();
+	let reward_address = AssetHubWestendReceiver::get();
 
 	BridgeHubWestend::fund_accounts(vec![
 		(assethub_sovereign.clone(), INITIAL_FUND),
@@ -37,8 +38,6 @@ fn claim_rewards_works() {
 	BridgeHubWestend::execute_with(|| {
 		type RuntimeEvent = <BridgeHubWestend as Chain>::RuntimeEvent;
 		type RuntimeOrigin = <BridgeHubWestend as Chain>::RuntimeOrigin;
-
-		let reward_address = AssetHubWestendReceiver::get();
 		let reward_amount = 2_000_000_000u128;
 
 		type BridgeRelayers = <BridgeHubWestend as BridgeHubWestendPallet>::BridgeRelayers;
@@ -48,17 +47,24 @@ fn claim_rewards_works() {
 			reward_amount,
 		);
 
-		// Check that the message was sent
+		// Check that the reward was registered.
 		assert_expected_events!(
 			BridgeHubWestend,
 			vec![
-				RuntimeEvent::BridgeRelayers(pallet_bridge_relayers::Event::RewardRegistered { .. }) => {},
+				RuntimeEvent::BridgeRelayers(pallet_bridge_relayers::Event::RewardRegistered { relayer, reward_kind, reward_balance }) => {
+					relayer: *relayer == relayer_account,
+					reward_kind: *reward_kind == BridgeReward::Snowbridge,
+					reward_balance: *reward_balance == reward_amount,
+				},
 			]
 		);
 
 		let relayer_location = Location::new(
 			1,
-			[Parachain(1000), Junction::AccountId32 { id: reward_address.into(), network: None }],
+			[
+				Parachain(1000),
+				Junction::AccountId32 { id: reward_address.clone().into(), network: None },
+			],
 		);
 		let reward_beneficiary =
 			BridgeRewardBeneficiaries::AssetHubLocation(VersionedLocation::V5(relayer_location));
@@ -69,14 +75,17 @@ fn claim_rewards_works() {
 		);
 		assert_ok!(result);
 
-		let events = BridgeHubWestend::events();
-		assert!(
-			events.iter().any(|event| matches!(
-				event,
-				RuntimeEvent::BridgeRelayers(pallet_bridge_relayers::Event::RewardPaid { relayer, reward_kind, reward_balance, beneficiary })
-					if *relayer == relayer_account && *reward_kind == BridgeReward::Snowbridge && *reward_balance == reward_amount && *beneficiary == reward_beneficiary
-			)),
-			"RewardPaid event with correct fields."
+		assert_expected_events!(
+			BridgeHubWestend,
+			vec![
+				// Check that the pay reward event was emitted on BH
+				RuntimeEvent::BridgeRelayers(pallet_bridge_relayers::Event::RewardPaid { relayer, reward_kind, reward_balance, beneficiary }) => {
+					relayer: *relayer == relayer_account,
+					reward_kind: *reward_kind == BridgeReward::Snowbridge,
+					reward_balance: *reward_balance == reward_amount,
+					beneficiary: *beneficiary == reward_beneficiary,
+				},
+			]
 		);
 	});
 
@@ -84,7 +93,13 @@ fn claim_rewards_works() {
 		type RuntimeEvent = <AssetHubWestend as Chain>::RuntimeEvent;
 		assert_expected_events!(
 			AssetHubWestend,
-			vec![RuntimeEvent::ForeignAssets(pallet_assets::Event::Issued { .. }) => {},]
+			vec![
+				// Check that the reward was paid on AH
+				RuntimeEvent::ForeignAssets(pallet_assets::Event::Issued { asset_id, owner, .. }) => {
+					asset_id: *asset_id == eth_location(),
+					owner: *owner == reward_address.clone().into(),
+				},
+			]
 		);
 	})
 }
