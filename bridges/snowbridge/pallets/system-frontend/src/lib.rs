@@ -37,7 +37,7 @@ pub const LOG_TARGET: &str = "snowbridge-system-frontend";
 
 #[derive(Encode, Decode, Debug, PartialEq, Clone, TypeInfo)]
 pub enum EthereumSystemCall {
-	#[codec(index = 2)]
+	#[codec(index = 0)]
 	RegisterToken { asset_id: Box<VersionedLocation>, metadata: AssetMetadata, fee: u128 },
 }
 
@@ -144,7 +144,7 @@ pub mod pallet {
 		/// - `asset_id`: Location of the asset (should starts from the dispatch origin)
 		/// - `metadata`: Metadata to include in the instantiated ERC20 contract on Ethereum
 		/// - `fee`: Fee in Ether paying for the execution cost on Ethreum
-		#[pallet::call_index(2)]
+		#[pallet::call_index(0)]
 		#[pallet::weight(T::WeightInfo::register_token())]
 		pub fn register_token(
 			origin: OriginFor<T>,

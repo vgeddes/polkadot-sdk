@@ -25,7 +25,7 @@ use xcm_executor::traits::ConvertLocation;
 
 #[derive(Encode, Decode, Debug, PartialEq, Clone, TypeInfo)]
 pub enum EthereumSystemFrontendCall {
-	#[codec(index = 2)]
+	#[codec(index = 0)]
 	RegisterToken { asset_id: Box<VersionedLocation>, metadata: AssetMetadata, fee: u128 },
 }
 
