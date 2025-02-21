@@ -2,20 +2,22 @@
 // SPDX-FileCopyrightText: 2023 Snowfork <hello@snowfork.com>
 //! Converts messages from Solidity ABI-encoding to XCM
 
+use crate::v2::LOG_TARGET;
 use codec::{Decode, DecodeLimit, Encode};
 use core::marker::PhantomData;
 use snowbridge_core::TokenId;
 use sp_core::{Get, RuntimeDebug, H160};
+use sp_io::hashing::blake2_256;
 use sp_runtime::traits::MaybeEquivalence;
 use sp_std::prelude::*;
 use xcm::{
-	prelude::{Junction::*, *}, MAX_XCM_DECODE_DEPTH
+	prelude::{Junction::*, *},
+	MAX_XCM_DECODE_DEPTH,
 };
-use crate::v2::LOG_TARGET;
-use sp_io::hashing::blake2_256;
 
-use super::message::*;
-use super::traits::*;
+use super::{message::*, traits::*};
+use crate::{CallIndex, EthereumLocationsConverterFor};
+use sp_runtime::MultiAddress;
 
 /// Representation of an intermediate parsed message, before final
 /// conversion to XCM.
@@ -44,6 +46,8 @@ pub enum AssetTransfer {
 
 /// Concrete implementation of `ConvertMessage`
 pub struct MessageToXcm<
+	CreateAssetCall,
+	CreateAssetDeposit,
 	EthereumNetwork,
 	InboundQueueLocation,
 	ConvertAssetId,
@@ -52,6 +56,8 @@ pub struct MessageToXcm<
 	GlobalAssetHubLocation,
 > {
 	_phantom: PhantomData<(
+		CreateAssetCall,
+		CreateAssetDeposit,
 		EthereumNetwork,
 		InboundQueueLocation,
 		ConvertAssetId,
@@ -62,13 +68,18 @@ pub struct MessageToXcm<
 }
 
 impl<
+		CreateAssetCall,
+		CreateAssetDeposit,
 		EthereumNetwork,
 		InboundQueueLocation,
 		ConvertAssetId,
 		GatewayProxyAddress,
 		EthereumUniversalLocation,
 		GlobalAssetHubLocation,
-	> MessageToXcm<
+	>
+	MessageToXcm<
+		CreateAssetCall,
+		CreateAssetDeposit,
 		EthereumNetwork,
 		InboundQueueLocation,
 		ConvertAssetId,
@@ -77,6 +88,8 @@ impl<
 		GlobalAssetHubLocation,
 	>
 where
+	CreateAssetCall: Get<CallIndex>,
+	CreateAssetDeposit: Get<u128>,
 	EthereumNetwork: Get<NetworkId>,
 	InboundQueueLocation: Get<InteriorLocation>,
 	ConvertAssetId: MaybeEquivalence<TokenId, Location>,
@@ -89,18 +102,63 @@ where
 		fn prepare(message: Message) -> Result<PreparedMessage, ConvertMessageError> {
 			let mut remote_xcm: Xcm<()> = Xcm::new();
 
-			// Allow xcm decode failure so that assets can be trapped on AH instead of this
-			// message failing but funds are already locked on Ethereum.
-			if let Ok(versioned_xcm) = VersionedXcm::<()>::decode_with_depth_limit(
-				MAX_XCM_DECODE_DEPTH,
-				&mut message.xcm.as_ref(),
-			) {
-				if let Ok(decoded_xcm) = versioned_xcm.try_into() {
-					remote_xcm = decoded_xcm;
-				}
-			}
-
 			let ether_location = Location::new(2, [GlobalConsensus(EthereumNetwork::get())]);
+
+			match &message.xcm {
+				XcmCommand::Raw(raw) => {
+					// Allow xcm decode failure so that assets can be trapped on AH instead of this
+					// message failing but funds are already locked on Ethereum.
+					if let Ok(versioned_xcm) = VersionedXcm::<()>::decode_with_depth_limit(
+						MAX_XCM_DECODE_DEPTH,
+						&mut raw.as_ref(),
+					) {
+						if let Ok(decoded_xcm) = versioned_xcm.try_into() {
+							remote_xcm = decoded_xcm;
+						}
+					}
+				},
+				XcmCommand::TokenRegistration { token, network: _ } => {
+					let chain_id = match EthereumNetwork::get() {
+						Ethereum { chain_id } => chain_id,
+						_ => panic!("checked statically, qed"),
+					};
+					let bridge_owner =
+						EthereumLocationsConverterFor::<[u8; 32]>::from_chain_id(&chain_id);
+					let dot_asset = Location::new(1, Here);
+					let dot_fee: xcm::prelude::Asset = (dot_asset, CreateAssetDeposit::get()).into();
+
+					let eth_asset_value = 9_000_000_000_000u128; // TODO needs to be specified
+					let asset_deposit: xcm::prelude::Asset =
+						(ether_location.clone(), eth_asset_value).into();
+
+					let instructions = vec![
+						// Exchange eth for dot to pay the asset creation deposit
+						ExchangeAsset {
+							give: asset_deposit.clone().into(),
+							want: dot_fee.clone().into(),
+							maximal: false,
+						},
+						// Deposit the dot deposit into the bridge sovereign account (where the asset
+						// creation fee will be deducted from)
+						DepositAsset { assets: dot_fee.into(), beneficiary: bridge_owner.into() },
+						// Call to create the asset.
+						Transact {
+							origin_kind: OriginKind::Xcm,
+							fallback_max_weight: None,
+							call: (
+								CreateAssetCall::get(),
+								token,
+								MultiAddress::<[u8; 32], ()>::Id(bridge_owner.into()),
+								1u128,
+							)
+								.encode()
+								.into(),
+						},
+						ExpectTransactStatus(MaybeErrorCode::Success),
+					];
+					remote_xcm = instructions.into();
+				},
+			}
 
 			// Asset to cover XCM execution fee
 			let execution_fee_asset: Asset = (ether_location.clone(), message.execution_fee).into();
@@ -163,6 +221,8 @@ where
 }
 
 impl<
+		CreateAssetCall,
+		CreateAssetDeposit,
 		EthereumNetwork,
 		InboundQueueLocation,
 		ConvertAssetId,
@@ -171,6 +231,8 @@ impl<
 		GlobalAssetHubLocation,
 	> ConvertMessage
 	for MessageToXcm<
+		CreateAssetCall,
+		CreateAssetDeposit,
 		EthereumNetwork,
 		InboundQueueLocation,
 		ConvertAssetId,
@@ -179,6 +241,8 @@ impl<
 		GlobalAssetHubLocation,
 	>
 where
+	CreateAssetCall: Get<CallIndex>,
+	CreateAssetDeposit: Get<u128>,
 	EthereumNetwork: Get<NetworkId>,
 	InboundQueueLocation: Get<InteriorLocation>,
 	ConvertAssetId: MaybeEquivalence<TokenId, Location>,
