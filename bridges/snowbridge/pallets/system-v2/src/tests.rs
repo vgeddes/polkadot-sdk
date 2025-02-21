@@ -15,7 +15,6 @@ fn register_tokens_succeeds() {
 			origin,
 			Box::new(versioned_location),
 			Default::default(),
-			1
 		));
 	});
 }

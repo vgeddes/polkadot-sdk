@@ -21,6 +21,6 @@ fn register_token() {
 			symbol: "pal".as_bytes().to_vec().try_into().unwrap(),
 			decimals: 12,
 		};
-		assert_ok!(EthereumSystemFrontend::register_token(origin, asset_id, asset_metadata, 100));
+		assert_ok!(EthereumSystemFrontend::register_token(origin, asset_id, asset_metadata));
 	});
 }

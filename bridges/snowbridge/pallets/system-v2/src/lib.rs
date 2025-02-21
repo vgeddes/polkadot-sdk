@@ -118,7 +118,6 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			asset_id: Box<VersionedLocation>,
 			metadata: AssetMetadata,
-			fee: u128,
 		) -> DispatchResult {
 			let origin_location = T::FrontendOrigin::ensure_origin(origin)?;
 			let message_origin = Self::location_to_message_origin(&origin_location)?;
@@ -142,7 +141,7 @@ pub mod pallet {
 				symbol: metadata.symbol.into_inner(),
 				decimals: metadata.decimals,
 			};
-			Self::send(message_origin, command, fee)?;
+			Self::send(message_origin, command, 0)?;
 
 			Self::deposit_event(Event::<T>::RegisterToken {
 				location: location.clone().into(),

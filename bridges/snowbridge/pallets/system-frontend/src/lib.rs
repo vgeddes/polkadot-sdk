@@ -38,7 +38,7 @@ pub const LOG_TARGET: &str = "snowbridge-system-frontend";
 #[derive(Encode, Decode, Debug, PartialEq, Clone, TypeInfo)]
 pub enum EthereumSystemCall {
 	#[codec(index = 0)]
-	RegisterToken { asset_id: Box<VersionedLocation>, metadata: AssetMetadata, fee: u128 },
+	RegisterToken { asset_id: Box<VersionedLocation>, metadata: AssetMetadata },
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -150,22 +150,17 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			asset_id: Box<VersionedLocation>,
 			metadata: AssetMetadata,
-			fee: u128,
 		) -> DispatchResult {
 			let asset_location: Location =
 				(*asset_id).try_into().map_err(|_| Error::<T>::UnsupportedLocationVersion)?;
 
 			let origin_location = T::RegisterTokenOrigin::ensure_origin(origin, &asset_location)?;
 
-			// Burn Ether Fee for the cost on ethereum
-			Self::burn_for_teleport(&origin_location, &(T::EthereumLocation::get(), fee).into())?;
-
 			let reanchored_asset_location = Self::reanchor(&asset_location)?;
 
 			let call = BridgeHubRuntime::EthereumSystem(EthereumSystemCall::RegisterToken {
 				asset_id: Box::new(VersionedLocation::from(reanchored_asset_location.clone())),
 				metadata,
-				fee,
 			});
 
 			let message_id = Self::send(origin_location.clone(), Self::build_xcm(&call))?;
