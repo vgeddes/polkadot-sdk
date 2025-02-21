@@ -102,7 +102,7 @@ where
 	AssetHubLocation: Get<Location>,
 	AssetHubXCMFee: Get<u128>,
 	XcmSender: SendXcm,
-	RewardBalance: Into<u128>,
+	RewardBalance: Into<u128> + Clone,
 	XcmExecutor: ExecuteXcm<Call>,
 	Call: Decode + GetDispatchInfo,
 {
@@ -117,16 +117,17 @@ where
 	) -> Result<(), Self::Error> {
 		let ethereum_location = Location::new(2, [GlobalConsensus(EthereumNetwork::get())]);
 
-		let reward_asset: Asset = (ethereum_location.clone(), reward.into()).into();
+		let total_amount: u128 = AssetHubXCMFee::get().saturating_add(reward.clone().into());
+		let total_assets: Asset = (ethereum_location.clone(), total_amount).into();
 		let fee_asset: Asset = (ethereum_location, AssetHubXCMFee::get()).into();
 
 		let xcm: Xcm<()> = alloc::vec![
-			RefundSurplus,
-			ReserveAssetDeposited(reward_asset.clone().into()),
-			PayFees { asset: fee_asset },
 			DescendOrigin(InboundQueueLocation::get().into()),
 			UniversalOrigin(GlobalConsensus(EthereumNetwork::get())),
+			ReserveAssetDeposited(total_assets.into()),
+			PayFees { asset: fee_asset },
 			DepositAsset { assets: AllCounted(1).into(), beneficiary },
+			RefundSurplus,
 		]
 		.into();
 
