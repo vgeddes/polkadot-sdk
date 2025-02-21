@@ -1,18 +1,18 @@
 // Copyright (C) Parity Technologies (UK) Ltd.
 // This file is part of Cumulus.
+// SPDX-License-Identifier: Apache-2.0
 
-// Cumulus is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-
-// Cumulus is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details.
-
-// You should have received a copy of the GNU General Public License
-// along with Cumulus.  If not, see <http://www.gnu.org/licenses/>.
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// 	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 use crate::{
 	xcm_config,
@@ -27,6 +27,7 @@ use snowbridge_outbound_queue_primitives::{
 	v1::{ConstantGasMeter, EthereumBlobExporter},
 	v2::{ConstantGasMeter as ConstantGasMeterV2, EthereumBlobExporter as EthereumBlobExporterV2},
 };
+use crate::BridgeRelayers;
 use sp_core::H160;
 use testnet_parachains_constants::westend::{
 	currency::*,
@@ -36,6 +37,7 @@ use testnet_parachains_constants::westend::{
 		INBOUND_QUEUE_PALLET_INDEX_V1, INBOUND_QUEUE_PALLET_INDEX_V2,
 	},
 };
+use crate::bridge_common_config::BridgeReward;
 
 use crate::xcm_config::{RelayNetwork, XcmConfig, XcmRouter};
 #[cfg(feature = "runtime-benchmarks")]
@@ -46,7 +48,7 @@ use sp_runtime::{
 	traits::{ConstU32, ConstU8, Keccak256},
 	FixedU128,
 };
-use xcm::prelude::{GlobalConsensus, InteriorLocation, Location, PalletInstance, Parachain};
+use xcm::prelude::{GlobalConsensus, InteriorLocation, Location, Parachain, PalletInstance};
 use xcm_executor::XcmExecutor;
 
 pub const SLOTS_PER_EPOCH: u32 = snowbridge_pallet_ethereum_client::config::SLOTS_PER_EPOCH as u32;
@@ -84,10 +86,14 @@ parameter_types! {
 		multiplier: FixedU128::from_rational(1, 1),
 	};
 	pub AssetHubFromEthereum: Location = Location::new(1,[GlobalConsensus(RelayNetwork::get()),Parachain(westend_runtime_constants::system_parachain::ASSET_HUB_ID)]);
+	pub AssetHubLocation: Location = Location::new(1,[Parachain(westend_runtime_constants::system_parachain::ASSET_HUB_ID)]);
 	pub EthereumUniversalLocation: InteriorLocation = [GlobalConsensus(EthereumNetwork::get())].into();
 	pub InboundQueueLocation: InteriorLocation = [PalletInstance(INBOUND_QUEUE_PALLET_INDEX_V2)].into();
 	pub SnowbridgeFrontendLocation: Location = Location::new(1,[Parachain(westend_runtime_constants::system_parachain::ASSET_HUB_ID),PalletInstance(FRONTEND_PALLET_INDEX)]);
 	pub AssethubLocation: Location = Location::new(1,[Parachain(westend_runtime_constants::system_parachain::ASSET_HUB_ID)]);
+	pub EthereumGlobalLocation: Location = Location::new(2, [GlobalConsensus(RelayNetwork::get())]);
+	pub AssetHubXCMFee: u128 = 1_000_000_000_000u128;
+	pub const DefaultMyRewardKind: BridgeReward = BridgeReward::Snowbridge;
 }
 
 impl snowbridge_pallet_inbound_queue::Config for Runtime {
@@ -132,7 +138,6 @@ impl snowbridge_pallet_inbound_queue_v2::Config for Runtime {
 	type Helper = Runtime;
 	type WeightInfo = crate::weights::snowbridge_pallet_inbound_queue_v2::WeightInfo<Runtime>;
 	type AssetHubParaId = ConstU32<1000>;
-	type RewardPayment = ();
 	type EthereumNetwork = EthereumNetwork;
 	type XcmExecutor = XcmExecutor<XcmConfig>;
 	type Token = Balances;
@@ -146,6 +151,10 @@ impl snowbridge_pallet_inbound_queue_v2::Config for Runtime {
 		EthereumUniversalLocation,
 		AssetHubFromEthereum,
 	>;
+	type RewardKind = BridgeReward;
+
+	type DefaultRewardKind = DefaultMyRewardKind;
+	type RewardPayment = BridgeRelayers;
 }
 
 impl snowbridge_pallet_outbound_queue::Config for Runtime {
@@ -177,7 +186,11 @@ impl snowbridge_pallet_outbound_queue_v2::Config for Runtime {
 	type WeightInfo = crate::weights::snowbridge_pallet_outbound_queue_v2::WeightInfo<Runtime>;
 	type ConvertAssetId = EthereumSystem;
 	type EthereumNetwork = EthereumNetwork;
-	type RewardPayment = ();
+	type RewardKind = BridgeReward;
+
+	type DefaultRewardKind = DefaultMyRewardKind;
+	type RewardPayment = BridgeRelayers;
+	type Token = Balances;
 }
 
 #[cfg(any(feature = "std", feature = "fast-runtime", feature = "runtime-benchmarks", test))]

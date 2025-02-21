@@ -4,6 +4,7 @@
 
 use crate::{CallIndex, EthereumLocationsConverterFor};
 use codec::{Decode, Encode};
+use codec::DecodeWithMemTracking;
 use core::marker::PhantomData;
 use frame_support::{traits::tokens::Balance as BalanceT, PalletError};
 use scale_info::TypeInfo;
@@ -121,7 +122,9 @@ pub struct MessageToXcm<
 }
 
 /// Reason why a message conversion failed.
-#[derive(Copy, Clone, TypeInfo, PalletError, Encode, Decode, RuntimeDebug)]
+#[derive(
+	Copy, Clone, TypeInfo, PalletError, Encode, Decode, DecodeWithMemTracking, RuntimeDebug,
+)]
 pub enum ConvertMessageError {
 	/// The message version is not supported for conversion.
 	UnsupportedVersion,

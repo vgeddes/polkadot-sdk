@@ -77,10 +77,15 @@ use bridge_hub_common::{AggregateMessageOrigin, CustomDigestItem};
 use codec::Decode;
 use frame_support::{
 	storage::StorageStreamIter,
-	traits::{tokens::Balance, EnqueueMessage, Get, ProcessMessageError},
+	traits::{
+		fungible::{Inspect, Mutate},
+		tokens::Balance,
+		EnqueueMessage, Get, ProcessMessageError,
+	},
 	weights::{Weight, WeightToFee},
 };
-use snowbridge_core::{ether_asset, BasicOperatingMode, PaymentProcedure, TokenId};
+use pallet_bridge_relayers::RewardLedger;
+use snowbridge_core::{BasicOperatingMode, TokenId};
 use snowbridge_merkle_tree::merkle_root;
 use snowbridge_outbound_queue_primitives::{
 	v2::{
@@ -92,14 +97,16 @@ use snowbridge_outbound_queue_primitives::{
 use sp_core::{H160, H256};
 use sp_runtime::{
 	traits::{BlockNumberProvider, Hash, MaybeEquivalence},
-	DigestItem,
+	DigestItem, SaturatedConversion,
 };
 use sp_std::prelude::*;
 pub use types::{PendingOrder, ProcessMessageOriginOf};
 pub use weights::WeightInfo;
 use xcm::latest::{Location, NetworkId};
-
 type DeliveryReceiptOf<T> = DeliveryReceipt<<T as frame_system::Config>::AccountId>;
+
+type BalanceOf<T> =
+	<<T as pallet::Config>::Token as Inspect<<T as frame_system::Config>::AccountId>>::Balance;
 
 pub use pallet::*;
 
@@ -145,13 +152,17 @@ pub mod pallet {
 		/// Address of the Gateway contract
 		#[pallet::constant]
 		type GatewayAddress: Get<H160>;
-
-		/// Means of paying a relayer
-		type RewardPayment: PaymentProcedure<Self::AccountId>;
-
-		type ConvertAssetId: MaybeEquivalence<TokenId, Location>;
-
+		/// Reward discriminator type.
+		type RewardKind: Parameter + MaxEncodedLen + Send + Sync + Copy + Clone;
+		/// The default RewardKind discriminator for rewards allocated to relayers from this pallet.
+		#[pallet::constant]
+		type DefaultRewardKind: Get<Self::RewardKind>;
+		/// Relayer reward payment.
+		type RewardPayment: RewardLedger<Self::AccountId, Self::RewardKind, BalanceOf<Self>>;
+		/// Ethereum NetworkId
 		type EthereumNetwork: Get<NetworkId>;
+		type ConvertAssetId: MaybeEquivalence<TokenId, Location>;
+		type Token: Mutate<Self::AccountId> + Inspect<Self::AccountId>;
 	}
 
 	#[pallet::event]
@@ -278,7 +289,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			event: Box<EventProof>,
 		) -> DispatchResult {
-			ensure_signed(origin)?;
+			let relayer = ensure_signed(origin)?;
 			ensure!(!Self::operating_mode().is_halted(), Error::<T>::Halted);
 
 			// submit message to verifier for verification
@@ -288,24 +299,7 @@ pub mod pallet {
 			let receipt = DeliveryReceiptOf::<T>::try_from(&event.event_log)
 				.map_err(|_| Error::<T>::InvalidEnvelope)?;
 
-			// Verify that the message was submitted from the known Gateway contract
-			ensure!(T::GatewayAddress::get() == receipt.gateway, Error::<T>::InvalidGateway);
-
-			let nonce = receipt.nonce;
-
-			let order = <PendingOrders<T>>::get(nonce).ok_or(Error::<T>::InvalidPendingNonce)?;
-
-			if order.fee > 0 {
-				let ether = ether_asset(T::EthereumNetwork::get(), order.fee);
-				T::RewardPayment::pay_reward(receipt.reward_address, ether)
-					.map_err(|_| Error::<T>::RewardPaymentFailed)?;
-			}
-
-			<PendingOrders<T>>::remove(nonce);
-
-			Self::deposit_event(Event::MessageDeliveryProofReceived { nonce });
-
-			Ok(())
+			Self::do_process_delivery_receipt(relayer, receipt)
 		}
 	}
 
@@ -403,6 +397,34 @@ pub mod pallet {
 			Self::deposit_event(Event::MessageAccepted { id: message.id, nonce });
 
 			Ok(true)
+		}
+
+		/// Process a delivery receipt from a relayer, to allocate the relayer reward.
+		pub fn do_process_delivery_receipt(
+			relayer: <T as frame_system::Config>::AccountId,
+			receipt: DeliveryReceiptOf<T> ,
+		) -> DispatchResult where <T as frame_system::Config>::AccountId: From<[u8; 32]> {
+			// Verify that the message was submitted from the known Gateway contract
+			ensure!(T::GatewayAddress::get() == receipt.gateway, Error::<T>::InvalidGateway);
+
+			let nonce = receipt.nonce;
+
+			let order = <PendingOrders<T>>::get(nonce).ok_or(Error::<T>::InvalidPendingNonce)?;
+
+			if order.fee > 0 {
+				// Pay relayer reward
+				T::RewardPayment::register_reward(
+					&relayer,
+					T::DefaultRewardKind::get(),
+					order.fee.saturated_into::<BalanceOf<T>>(),
+				);
+			}
+
+			<PendingOrders<T>>::remove(nonce);
+
+			Self::deposit_event(Event::MessageDeliveryProofReceived { nonce });
+
+			Ok(())
 		}
 
 		/// The local component of the message processing fees in native currency
