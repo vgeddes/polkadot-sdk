@@ -35,6 +35,6 @@ impl BasicOperatingMode {
 	}
 }
 
-pub trait IsHalted {
-	fn is_halted() -> bool;
+pub trait ExportPausedQuery {
+	fn is_paused() -> bool;
 }

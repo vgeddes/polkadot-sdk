@@ -22,7 +22,7 @@ pub use weights::*;
 
 use frame_support::{pallet_prelude::*, traits::EnsureOriginWithArg};
 use frame_system::pallet_prelude::*;
-use snowbridge_core::{operating_mode::IsHalted, AssetMetadata, BasicOperatingMode};
+use snowbridge_core::{operating_mode::ExportPausedQuery, AssetMetadata, BasicOperatingMode};
 use sp_core::H256;
 use sp_std::prelude::*;
 use xcm::prelude::*;
@@ -224,7 +224,7 @@ pub mod pallet {
 		}
 	}
 
-	impl<T: Config> IsHalted for Pallet<T> {
+	impl<T: Config> ExportPausedQuery for Pallet<T> {
 		fn is_halted() -> bool {
 			Self::operating_mode().is_halted()
 		}
