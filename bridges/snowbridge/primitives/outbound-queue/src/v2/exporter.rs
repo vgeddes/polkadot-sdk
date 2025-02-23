@@ -19,14 +19,14 @@ impl<Halted: IsHalted, InnerExporter: SendXcm> SendXcm for PausableExporter<Halt
 		message: &mut Option<Xcm<()>>,
 	) -> SendResult<Self::Ticket> {
 		match Halted::is_halted() {
-			true => Err(SendError::Transport("router paused")),
+			true => Err(SendError::NotApplicable),
 			false => InnerExporter::validate(destination, message),
 		}
 	}
 
 	fn deliver(ticket: Self::Ticket) -> Result<XcmHash, SendError> {
 		match Halted::is_halted() {
-			true => Err(SendError::Transport("router paused")),
+			true => Err(SendError::NotApplicable),
 			false => InnerExporter::deliver(ticket),
 		}
 	}
