@@ -188,7 +188,7 @@ pub mod pallet {
 			asset_id: Box<VersionedLocation>,
 			metadata: AssetMetadata,
 		) -> DispatchResult {
-			let origin_location = T::FrontendOrigin::ensure_origin(origin)?;
+			T::FrontendOrigin::ensure_origin(origin)?;
 
 			let sender_location: Location =
 				(*sender).try_into().map_err(|_| Error::<T>::UnsupportedLocationVersion)?;

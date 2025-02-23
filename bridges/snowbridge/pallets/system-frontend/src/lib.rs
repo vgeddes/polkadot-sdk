@@ -28,8 +28,10 @@ use frame_support::{pallet_prelude::*, traits::EnsureOriginWithArg};
 use frame_system::pallet_prelude::*;
 use snowbridge_core::AssetMetadata;
 use sp_std::prelude::*;
-use xcm::prelude::*;
-use xcm::latest::{XcmHash, validate_send};
+use xcm::{
+	latest::{validate_send, XcmHash},
+	prelude::*,
+};
 use xcm_executor::traits::{FeeManager, FeeReason, TransactAsset};
 
 #[cfg(feature = "runtime-benchmarks")]
@@ -50,11 +52,11 @@ pub enum BridgeHubRuntime {
 /// Call indices for dispatchables within `snowbridge-pallet-system-v2`
 #[derive(Encode, Decode, Debug, PartialEq, Clone, TypeInfo)]
 pub enum EthereumSystemCall {
-	#[codec(index = 2)]
+	#[codec(index = 0)]
 	RegisterToken {
 		sender: Box<VersionedLocation>,
 		asset_id: Box<VersionedLocation>,
-		metadata: AssetMetadata
+		metadata: AssetMetadata,
 	},
 }
 
@@ -119,7 +121,12 @@ pub mod pallet {
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
 		/// A XCM message was sent
-		MessageSent { origin: Location, destination: Location, message: Xcm<()>, message_id: XcmHash },
+		MessageSent {
+			origin: Location,
+			destination: Location,
+			message: Xcm<()>,
+			message_id: XcmHash,
+		},
 	}
 
 	#[pallet::error]
@@ -151,12 +158,13 @@ pub mod pallet {
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-		/// Initiates the registration for a Polkadot-native token as a wrapped ERC20 token on Ethereum.
+		/// Initiates the registration for a Polkadot-native token as a wrapped ERC20 token on
+		/// Ethereum.
 		/// - `asset_id`: Location of the asset
 		/// - `metadata`: Metadata to include in the instantiated ERC20 contract on Ethereum
 		///
-		/// All origins are allowed, however `asset_id` must be a location nested within the origin consensus
-		/// system.
+		/// All origins are allowed, however `asset_id` must be a location nested within the origin
+		/// consensus system.
 		#[pallet::call_index(0)]
 		#[pallet::weight(
 			T::WeightInfo::register_token()
@@ -172,10 +180,12 @@ pub mod pallet {
 			let origin_location = T::RegisterTokenOrigin::ensure_origin(origin, &asset_location)?;
 
 			let dest = T::BridgeHubLocation::get();
-			let call = Self::build_register_token_call(&origin_location, &asset_location, metadata)?;
+			let call =
+				Self::build_register_token_call(&origin_location, &asset_location, metadata)?;
 			let remote_xcm = Self::build_remote_xcm(&call);
-			let message_id = Self::send_xcm(origin_location.clone(), dest.clone(), remote_xcm.clone())
-				.map_err(|error| Error::<T>::from(error))?;
+			let message_id =
+				Self::send_xcm(origin_location.clone(), dest.clone(), remote_xcm.clone())
+					.map_err(|error| Error::<T>::from(error))?;
 
 			Self::deposit_event(Event::<T>::MessageSent {
 				origin: T::PalletLocation::get().into(),
@@ -203,19 +213,17 @@ pub mod pallet {
 		fn build_register_token_call(
 			sender: &Location,
 			asset: &Location,
-			metadata: AssetMetadata) -> Result<BridgeHubRuntime, Error<T>>
-		{
+			metadata: AssetMetadata,
+		) -> Result<BridgeHubRuntime, Error<T>> {
 			// reanchor locations relative to BH
 			let sender = Self::reanchored(&sender)?;
 			let asset = Self::reanchored(&asset)?;
 
-			let call = BridgeHubRuntime::EthereumSystem(
-				EthereumSystemCall::RegisterToken {
-					sender: Box::new(VersionedLocation::from(sender)),
-					asset_id: Box::new(VersionedLocation::from(asset)),
-					metadata,
-				}
-			);
+			let call = BridgeHubRuntime::EthereumSystem(EthereumSystemCall::RegisterToken {
+				sender: Box::new(VersionedLocation::from(sender)),
+				asset_id: Box::new(VersionedLocation::from(asset)),
+				metadata,
+			});
 
 			Ok(call)
 		}
