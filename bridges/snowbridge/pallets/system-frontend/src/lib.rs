@@ -125,7 +125,7 @@ pub mod pallet {
 		FeesNotMet,
 		/// Convert to reanchored location failure
 		LocationConversionFailed,
-		/// Send non-governance extrinsic when the bridge is halted
+		/// Message export is halted
 		Halted,
 		/// The desired destination was unreachable, generally because there is a no way of routing
 		/// to it.
@@ -177,7 +177,7 @@ pub mod pallet {
 			Ok(())
 		}
 
-		/// Halt or resume all pallet operations. May only be called by root.
+		/// Set the operating mode of the pallet, which can restrict messaging to Ethereum.
 		#[pallet::call_index(1)]
 		#[pallet::weight((T::DbWeight::get().reads_writes(1, 1), DispatchClass::Operational))]
 		pub fn set_operating_mode(
