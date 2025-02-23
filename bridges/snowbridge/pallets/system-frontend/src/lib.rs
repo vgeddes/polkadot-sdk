@@ -225,7 +225,7 @@ pub mod pallet {
 	}
 
 	impl<T: Config> ExportPausedQuery for Pallet<T> {
-		fn is_halted() -> bool {
+		fn is_paused() -> bool {
 			Self::operating_mode().is_halted()
 		}
 	}
