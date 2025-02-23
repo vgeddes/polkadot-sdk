@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2023 Snowfork <hello@snowfork.com>
 //! # Outbound V2 primitives
 
-use codec::{Decode, Encode};
+use codec::{Decode, DecodeWithMemTracking, Encode};
 use frame_support::{pallet_prelude::ConstU32, BoundedVec};
 use scale_info::TypeInfo;
 use sp_arithmetic::traits::{BaseArithmetic, Unsigned};
@@ -118,7 +118,7 @@ pub struct OutboundMessage {
 pub const MAX_COMMANDS: u32 = 8;
 
 /// A message which can be accepted by implementations of `/[`SendMessage`\]`
-#[derive(Encode, Decode, TypeInfo, PartialEq, Clone, RuntimeDebug)]
+#[derive(Encode, Decode, DecodeWithMemTracking, TypeInfo, PartialEq, Clone, RuntimeDebug)]
 pub struct Message {
 	/// Origin
 	pub origin: H256,
@@ -131,7 +131,7 @@ pub struct Message {
 }
 
 /// A command which is executable by the Gateway contract on Ethereum
-#[derive(Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo)]
+#[derive(Clone, Encode, Decode, DecodeWithMemTracking, PartialEq, RuntimeDebug, TypeInfo)]
 pub enum Command {
 	/// Upgrade the Gateway contract
 	Upgrade {
@@ -139,8 +139,8 @@ pub enum Command {
 		impl_address: H160,
 		/// Codehash of the implementation contract
 		impl_code_hash: H256,
-		/// Optionally invoke an initializer in the implementation contract
-		initializer: Option<Initializer>,
+		/// Invoke an initializer in the implementation contract
+		initializer: Initializer,
 	},
 	/// Create an agent representing a consensus system on Polkadot
 	CreateAgent {},
@@ -208,14 +208,12 @@ impl Command {
 	/// ABI-encode the Command.
 	pub fn abi_encode(&self) -> Vec<u8> {
 		match self {
-			Command::Upgrade { impl_address, impl_code_hash, initializer, .. } => UpgradeParams {
-				implAddress: Address::from(impl_address.as_fixed_bytes()),
-				implCodeHash: FixedBytes::from(impl_code_hash.as_fixed_bytes()),
-				initParams: initializer
-					.clone()
-					.map_or(Bytes::from(vec![]), |i| Bytes::from(i.params)),
-			}
-			.abi_encode(),
+			Command::Upgrade { impl_address, impl_code_hash, initializer, .. } =>
+				UpgradeParams {
+					implAddress: Address::from(impl_address.as_fixed_bytes()),
+					implCodeHash: FixedBytes::from(impl_code_hash.as_fixed_bytes()),
+					initParams: Bytes::from(initializer.params.clone()),
+				}.abi_encode(),
 			Command::CreateAgent {} => vec![],
 			Command::SetOperatingMode { mode } =>
 				SetOperatingModeParams { mode: (*mode) as u8 }.abi_encode(),
@@ -252,7 +250,7 @@ impl Command {
 
 /// Representation of a call to the initializer of an implementation contract.
 /// The initializer has the following ABI signature: `initialize(bytes)`.
-#[derive(Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo)]
+#[derive(Clone, Encode, Decode, DecodeWithMemTracking, PartialEq, RuntimeDebug, TypeInfo)]
 pub struct Initializer {
 	/// ABI-encoded params of type `bytes` to pass to the initializer
 	pub params: Vec<u8>,
@@ -296,13 +294,9 @@ impl GasMeter for ConstantGasMeter {
 			Command::CreateAgent { .. } => 275_000,
 			Command::SetOperatingMode { .. } => 40_000,
 			Command::Upgrade { initializer, .. } => {
-				let initializer_max_gas = match *initializer {
-					Some(Initializer { maximum_required_gas, .. }) => maximum_required_gas,
-					None => 0,
-				};
 				// total maximum gas must also include the gas used for updating the proxy before
 				// the the initializer is called.
-				50_000 + initializer_max_gas
+				50_000 + initializer.maximum_required_gas
 			},
 			Command::UnlockNativeToken { .. } => 100_000,
 			Command::RegisterForeignToken { .. } => 1_200_000,

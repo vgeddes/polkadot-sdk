@@ -22,7 +22,7 @@ pub use polkadot_parachain_primitives::primitives::{
 pub use ringbuffer::{RingBufferMap, RingBufferMapImpl};
 pub use sp_core::U256;
 
-use codec::{Decode, Encode, MaxEncodedLen};
+use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use frame_support::{traits::Contains, BoundedVec};
 use hex_literal::hex;
 use scale_info::TypeInfo;
@@ -30,7 +30,8 @@ use sp_core::{ConstU32, H256};
 use sp_io::hashing::keccak_256;
 use sp_runtime::{traits::AccountIdConversion, RuntimeDebug};
 use sp_std::prelude::*;
-use xcm::prelude::{Junction::Parachain, Location};
+use xcm::latest::{Junction::Parachain, Location, Asset, Result as XcmResult, XcmContext};
+use xcm_executor::traits::TransactAsset;
 
 /// The ID of an agent contract
 pub use operating_mode::BasicOperatingMode;
@@ -69,7 +70,17 @@ pub const ROC: u128 = 1_000_000_000_000;
 
 /// Identifier for a message channel
 #[derive(
-	Clone, Copy, Encode, Decode, PartialEq, Eq, Default, RuntimeDebug, MaxEncodedLen, TypeInfo,
+	Clone,
+	Copy,
+	Encode,
+	Decode,
+	DecodeWithMemTracking,
+	PartialEq,
+	Eq,
+	Default,
+	RuntimeDebug,
+	MaxEncodedLen,
+	TypeInfo,
 )]
 pub struct ChannelId([u8; 32]);
 
@@ -154,7 +165,7 @@ pub const SECONDARY_GOVERNANCE_CHANNEL: ChannelId =
 	ChannelId::new(hex!("0000000000000000000000000000000000000000000000000000000000000002"));
 
 /// Metadata to include in the instantiated ERC20 token contract
-#[derive(Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo)]
+#[derive(Clone, Encode, Decode, DecodeWithMemTracking, PartialEq, RuntimeDebug, TypeInfo)]
 pub struct AssetMetadata {
 	pub name: BoundedVec<u8, ConstU32<METADATA_FIELD_MAX_LEN>>,
 	pub symbol: BoundedVec<u8, ConstU32<METADATA_FIELD_MAX_LEN>>,
@@ -174,3 +185,13 @@ impl Default for AssetMetadata {
 
 /// Maximum length of a string field in ERC20 token metada
 const METADATA_FIELD_MAX_LEN: u32 = 32;
+
+pub fn burn_for_teleport<AssetTransactor>(origin: &Location, fee: &Asset) -> XcmResult
+where AssetTransactor: TransactAsset {
+	let dummy_context =
+		XcmContext { origin: None, message_id: Default::default(), topic: None };
+	AssetTransactor::can_check_out(origin, fee, &dummy_context)?;
+	AssetTransactor::check_out(origin, fee, &dummy_context);
+	AssetTransactor::withdraw_asset(fee, origin, None)?;
+	Ok(())
+}

@@ -36,16 +36,17 @@ use frame_support::{pallet_prelude::*, traits::EnsureOrigin};
 use frame_system::pallet_prelude::*;
 use snowbridge_core::{AgentIdOf as LocationHashOf, AssetMetadata, TokenId, TokenIdOf};
 use snowbridge_outbound_queue_primitives::{
-	v2::{Command, Message, SendMessage},
-	SendError,
+	v2::{Command, Initializer, Message, SendMessage},
+	OperatingMode, SendError,
 };
-use sp_core::H256;
+use sp_core::{H160, H256};
+use sp_io::hashing::blake2_256;
 use sp_runtime::traits::MaybeEquivalence;
 use sp_std::prelude::*;
 use xcm::prelude::*;
 use xcm_executor::traits::ConvertLocation;
 
-use snowbridge_pallet_system::{Agents, ForeignToNativeId, NativeToForeignId};
+use snowbridge_pallet_system::{ForeignToNativeId, NativeToForeignId};
 
 #[cfg(feature = "runtime-benchmarks")]
 use frame_support::traits::OriginTrait;
@@ -79,6 +80,9 @@ pub mod pallet {
 		/// Origin check for XCM locations that transact with this pallet
 		type FrontendOrigin: EnsureOrigin<Self::RuntimeOrigin, Success = Location>;
 
+		/// Origin for governance calls
+		type GovernanceOrigin: EnsureOrigin<Self::RuntimeOrigin, Success = Location>;
+
 		type WeightInfo: WeightInfo;
 		#[cfg(feature = "runtime-benchmarks")]
 		type Helper: BenchmarkHelper<Self::RuntimeOrigin>;
@@ -87,8 +91,10 @@ pub mod pallet {
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
-		/// An CreateAgent message was sent to the Gateway
-		CreateAgent { location: Box<Location>, agent_id: H256 },
+		/// An Upgrade message was sent to the Gateway
+		Upgrade { impl_address: H160, impl_code_hash: H256, initializer_params_hash: H256 },
+		/// An SetOperatingMode message was sent to the Gateway
+		SetOperatingMode { mode: OperatingMode },
 		/// Register Polkadot-native token as a wrapped ERC20 token on Ethereum
 		RegisterToken {
 			/// Location of Polkadot-native token
@@ -102,46 +108,67 @@ pub mod pallet {
 	pub enum Error<T> {
 		LocationReanchorFailed,
 		LocationConversionFailed,
-		AgentAlreadyCreated,
-		NoAgent,
 		UnsupportedLocationVersion,
 		InvalidLocation,
 		Send(SendError),
+		InvalidUpgradeParameters,
 	}
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-		/// Sends a command to the Gateway contract to instantiate a new agent contract representing
-		/// `origin`.
+		/// Sends command to the Gateway contract to upgrade itself with a new implementation
+		/// contract
 		///
-		/// - `location`: The location representing the agent
-		/// - `fee`: Ether to pay for the execution cost on Ethereum
-		#[pallet::call_index(1)]
-		#[pallet::weight(<T as pallet::Config>::WeightInfo::create_agent())]
-		pub fn create_agent(
+		/// Fee required: No
+		///
+		/// - `origin`: Must be `Root`.
+		/// - `impl_address`: The address of the implementation contract.
+		/// - `impl_code_hash`: The codehash of the implementation contract.
+		/// - `initializer`: Optionally call an initializer on the implementation contract.
+		#[pallet::call_index(3)]
+		#[pallet::weight((<T as pallet::Config>::WeightInfo::upgrade(), DispatchClass::Operational))]
+		pub fn upgrade(
 			origin: OriginFor<T>,
-			location: Box<VersionedLocation>,
-			fee: u128,
+			impl_address: H160,
+			impl_code_hash: H256,
+			initializer: Initializer,
 		) -> DispatchResult {
-			T::FrontendOrigin::ensure_origin(origin)?;
+			let origin_location = T::GovernanceOrigin::ensure_origin(origin)?;
+			let origin = Self::location_to_message_origin(&origin_location)?;
 
-			let location: Location =
-				(*location).try_into().map_err(|_| Error::<T>::UnsupportedLocationVersion)?;
+			ensure!(
+				!impl_address.eq(&H160::zero()) && !impl_code_hash.eq(&H256::zero()),
+				Error::<T>::InvalidUpgradeParameters
+			);
 
-			let message_origin = Self::location_to_message_origin(&location)?;
+			let initializer_params_hash: H256 = blake2_256(initializer.params.as_ref()).into();
 
-			// Record the agent id or fail if it has already been created
-			ensure!(!Agents::<T>::contains_key(message_origin), Error::<T>::AgentAlreadyCreated);
-			Agents::<T>::insert(message_origin, ());
+			let command = Command::Upgrade { impl_address, impl_code_hash, initializer };
+			Self::send(origin, command, 0)?;
 
-			let command = Command::CreateAgent {};
-
-			Self::send(message_origin, command, fee)?;
-
-			Self::deposit_event(Event::<T>::CreateAgent {
-				location: Box::new(location),
-				agent_id: message_origin,
+			Self::deposit_event(Event::<T>::Upgrade {
+				impl_address,
+				impl_code_hash,
+				initializer_params_hash,
 			});
+			Ok(())
+		}
+
+		/// Sends a message to the Gateway contract to change its operating mode
+		///
+		/// Fee required: No
+		///
+		/// - `origin`: Must be `Root`
+		#[pallet::call_index(4)]
+		#[pallet::weight((<T as pallet::Config>::WeightInfo::set_operating_mode(), DispatchClass::Operational))]
+		pub fn set_operating_mode(origin: OriginFor<T>, mode: OperatingMode) -> DispatchResult {
+			let origin_location = T::GovernanceOrigin::ensure_origin(origin)?;
+			let origin = Self::location_to_message_origin(&origin_location)?;
+
+			let command = Command::SetOperatingMode { mode };
+			Self::send(origin, command, 0)?;
+
+			Self::deposit_event(Event::<T>::SetOperatingMode { mode });
 			Ok(())
 		}
 
@@ -150,13 +177,12 @@ pub mod pallet {
 		/// - `asset_id`: Location of the asset (relative to this chain)
 		/// - `metadata`: Metadata to include in the instantiated ERC20 contract on Ethereum
 		/// - `fee`: Ether to pay for the execution cost on Ethereum
-		#[pallet::call_index(2)]
+		#[pallet::call_index(0)]
 		#[pallet::weight(<T as pallet::Config>::WeightInfo::register_token())]
 		pub fn register_token(
 			origin: OriginFor<T>,
 			asset_id: Box<VersionedLocation>,
 			metadata: AssetMetadata,
-			fee: u128,
 		) -> DispatchResult {
 			let origin_location = T::FrontendOrigin::ensure_origin(origin)?;
 			let message_origin = Self::location_to_message_origin(&origin_location)?;
@@ -180,7 +206,7 @@ pub mod pallet {
 				symbol: metadata.symbol.into_inner(),
 				decimals: metadata.decimals,
 			};
-			Self::send(message_origin, command, fee)?;
+			Self::send(message_origin, command, 0)?;
 
 			Self::deposit_event(Event::<T>::RegisterToken {
 				location: location.clone().into(),
