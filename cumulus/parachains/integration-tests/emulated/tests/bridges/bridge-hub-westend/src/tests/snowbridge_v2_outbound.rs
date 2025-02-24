@@ -23,7 +23,7 @@ use rococo_westend_system_emulated_network::penpal_emulated_chain::penpal_runtim
 use snowbridge_core::AssetMetadata;
 use snowbridge_inbound_queue_primitives::EthereumLocationsConverterFor;
 use snowbridge_outbound_queue_primitives::v2::{ContractCall, DeliveryReceipt};
-use snowbridge_pallet_outbound_queue_v2::{Error, Error::InvalidPendingNonce};
+use snowbridge_pallet_outbound_queue_v2::Error;
 use xcm::v5::AssetTransferFilter;
 use xcm_executor::traits::ConvertLocation;
 

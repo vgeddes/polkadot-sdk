@@ -193,7 +193,6 @@ impl snowbridge_pallet_outbound_queue_v2::Config for Runtime {
 
 	type DefaultRewardKind = DefaultMyRewardKind;
 	type RewardPayment = BridgeRelayers;
-	type Token = Balances;
 }
 
 #[cfg(any(feature = "std", feature = "fast-runtime", feature = "runtime-benchmarks", test))]

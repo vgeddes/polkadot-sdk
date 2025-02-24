@@ -78,7 +78,6 @@ use codec::Decode;
 use frame_support::{
 	storage::StorageStreamIter,
 	traits::{
-		fungible::{Inspect, Mutate},
 		tokens::Balance,
 		EnqueueMessage, Get, ProcessMessageError,
 	},
@@ -97,16 +96,13 @@ use snowbridge_outbound_queue_primitives::{
 use sp_core::{H160, H256};
 use sp_runtime::{
 	traits::{BlockNumberProvider, Hash, MaybeEquivalence},
-	DigestItem, SaturatedConversion,
+	DigestItem,
 };
 use sp_std::prelude::*;
 pub use types::{PendingOrder, ProcessMessageOriginOf};
 pub use weights::WeightInfo;
 use xcm::latest::{Location, NetworkId};
 type DeliveryReceiptOf<T> = DeliveryReceipt<<T as frame_system::Config>::AccountId>;
-
-type BalanceOf<T> =
-	<<T as pallet::Config>::Token as Inspect<<T as frame_system::Config>::AccountId>>::Balance;
 
 pub use pallet::*;
 
@@ -158,11 +154,10 @@ pub mod pallet {
 		#[pallet::constant]
 		type DefaultRewardKind: Get<Self::RewardKind>;
 		/// Relayer reward payment.
-		type RewardPayment: RewardLedger<Self::AccountId, Self::RewardKind, BalanceOf<Self>>;
+		type RewardPayment: RewardLedger<Self::AccountId, Self::RewardKind, u128>;
 		/// Ethereum NetworkId
 		type EthereumNetwork: Get<NetworkId>;
 		type ConvertAssetId: MaybeEquivalence<TokenId, Location>;
-		type Token: Mutate<Self::AccountId> + Inspect<Self::AccountId>;
 	}
 
 	#[pallet::event]
@@ -416,7 +411,7 @@ pub mod pallet {
 				T::RewardPayment::register_reward(
 					&relayer,
 					T::DefaultRewardKind::get(),
-					order.fee.saturated_into::<BalanceOf<T>>(),
+					order.fee,
 				);
 			}
 

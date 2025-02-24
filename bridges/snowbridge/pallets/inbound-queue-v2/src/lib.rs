@@ -55,7 +55,6 @@ use snowbridge_inbound_queue_primitives::{
 use sp_core::H160;
 use xcm::prelude::{ExecuteXcm, Junction::*, Location, SendXcm, *};
 
-use frame_support::sp_runtime::SaturatedConversion;
 use pallet_bridge_relayers::RewardLedger;
 #[cfg(feature = "runtime-benchmarks")]
 use {snowbridge_beacon_primitives::BeaconHeader, sp_core::H256};
@@ -114,7 +113,7 @@ pub mod pallet {
 		#[pallet::constant]
 		type DefaultRewardKind: Get<Self::RewardKind>;
 		/// Relayer reward payment.
-		type RewardPayment: RewardLedger<Self::AccountId, Self::RewardKind, BalanceOf<Self>>;
+		type RewardPayment: RewardLedger<Self::AccountId, Self::RewardKind, u128>;
 		type WeightInfo: WeightInfo;
 		/// Convert a weight value into deductible balance type.
 		type WeightToFee: WeightToFee<Balance = BalanceOf<Self>>;
@@ -266,7 +265,7 @@ pub mod pallet {
 			T::RewardPayment::register_reward(
 				&relayer,
 				T::DefaultRewardKind::get(),
-				message.relayer_fee.saturated_into::<BalanceOf<T>>(),
+				message.relayer_fee,
 			);
 
 			// Mark message as received
