@@ -127,9 +127,8 @@ where
 					let dot_asset = Location::new(1, Here);
 					let dot_fee: xcm::prelude::Asset = (dot_asset, CreateAssetDeposit::get()).into();
 
-					let eth_asset_value = 9_000_000_000_000u128; // TODO needs to be specified
 					let asset_deposit: xcm::prelude::Asset =
-						(ether_location.clone(), eth_asset_value).into();
+						(ether_location.clone(), message.value).into();
 
 					let instructions = vec![
 						// Exchange eth for dot to pay the asset creation deposit
