@@ -39,6 +39,9 @@ use snowbridge_outbound_queue_primitives::{
 	v2::{Command, Initializer, Message, SendMessage},
 	OperatingMode, SendError,
 };
+use snowbridge_pallet_system::{ForeignToNativeId, NativeToForeignId};
+#[cfg(feature = "runtime-benchmarks")]
+use snowbridge_test_helper_primitives::BenchmarkHelper;
 use sp_core::{H160, H256};
 use sp_io::hashing::blake2_256;
 use sp_runtime::traits::MaybeEquivalence;
@@ -46,22 +49,9 @@ use sp_std::prelude::*;
 use xcm::prelude::*;
 use xcm_executor::traits::ConvertLocation;
 
-use snowbridge_pallet_system::{ForeignToNativeId, NativeToForeignId};
-
-#[cfg(feature = "runtime-benchmarks")]
-use frame_support::traits::OriginTrait;
-
 pub use pallet::*;
 
 pub type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
-
-#[cfg(feature = "runtime-benchmarks")]
-pub trait BenchmarkHelper<O>
-where
-	O: OriginTrait,
-{
-	fn make_xcm_origin(location: Location) -> O;
-}
 
 #[frame_support::pallet]
 pub mod pallet {

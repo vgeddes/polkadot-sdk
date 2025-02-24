@@ -27,15 +27,14 @@ pub use backend_weights::*;
 use frame_support::{pallet_prelude::*, traits::EnsureOriginWithArg};
 use frame_system::pallet_prelude::*;
 use snowbridge_core::AssetMetadata;
+#[cfg(feature = "runtime-benchmarks")]
+use snowbridge_test_helper_primitives::BenchmarkHelper;
 use sp_std::prelude::*;
 use xcm::{
 	latest::{validate_send, XcmHash},
 	prelude::*,
 };
 use xcm_executor::traits::{FeeManager, FeeReason, TransactAsset};
-
-#[cfg(feature = "runtime-benchmarks")]
-use frame_support::traits::OriginTrait;
 
 pub use pallet::*;
 
@@ -58,14 +57,6 @@ pub enum EthereumSystemCall {
 		asset_id: Box<VersionedLocation>,
 		metadata: AssetMetadata,
 	},
-}
-
-#[cfg(feature = "runtime-benchmarks")]
-pub trait BenchmarkHelper<O>
-where
-	O: OriginTrait,
-{
-	fn make_xcm_origin(location: Location) -> O;
 }
 
 #[frame_support::pallet]
