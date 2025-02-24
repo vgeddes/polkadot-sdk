@@ -54,6 +54,8 @@ use snowbridge_inbound_queue_primitives::{
 	EventProof, VerificationError, Verifier,
 };
 use sp_core::H160;
+use sp_runtime::traits::TryConvert;
+use sp_std::prelude::*;
 use xcm::prelude::{ExecuteXcm, Junction::*, Location, SendXcm, *};
 
 #[cfg(feature = "runtime-benchmarks")]
@@ -74,7 +76,6 @@ pub mod pallet {
 
 	use frame_support::pallet_prelude::*;
 	use frame_system::pallet_prelude::*;
-	use sp_std::prelude::*;
 
 	#[pallet::pallet]
 	pub struct Pallet<T>(_);
@@ -112,6 +113,8 @@ pub mod pallet {
 		/// Convert a weight value into deductible balance type.
 		type WeightToFee: WeightToFee<Balance = BalanceOf<Self>>;
 		type Token: Mutate<Self::AccountId> + Inspect<Self::AccountId>;
+		/// AccountId to Location converter
+		type AccountToLocation: for<'a> TryConvert<&'a Self::AccountId, Location>;
 	}
 
 	#[pallet::event]
@@ -199,7 +202,7 @@ pub mod pallet {
 	pub type OperatingMode<T: Config> = StorageValue<_, BasicOperatingMode, ValueQuery>;
 
 	#[pallet::call]
-	impl<T: Config> Pallet<T> where T::AccountId: Into<Location> {
+	impl<T: Config> Pallet<T> {
 		/// Submit an inbound message originating from the Gateway contract on Ethereum
 		#[pallet::call_index(0)]
 		#[pallet::weight(T::WeightInfo::submit())]
@@ -232,7 +235,7 @@ pub mod pallet {
 		}
 	}
 
-	impl<T: Config> Pallet<T> where T::AccountId: Into<Location> {
+	impl<T: Config> Pallet<T> {
 		pub fn process_message(relayer: T::AccountId, message: Message) -> DispatchResult {
 			// Verify that the message was submitted from the known Gateway contract
 			ensure!(T::GatewayAddress::get() == message.gateway, Error::<T>::InvalidGateway);
@@ -270,6 +273,13 @@ pub mod pallet {
 			xcm: Xcm<()>,
 		) -> Result<XcmHash, SendError> {
 			let (ticket, fee) = validate_send::<T::XcmSender>(dest, xcm)?;
+			let fee_payer = T::AccountToLocation::try_convert(&fee_payer).map_err(|err| {
+				log::error!(
+					target: LOG_TARGET,
+					"Failed to convert on-demand pot account to XCM location: {err:?}",
+				);
+				SendError::NotApplicable
+			})?;
 			T::XcmExecutor::charge_fees(fee_payer.clone(), fee.clone()).map_err(|error| {
 				tracing::error!(
 					target: LOG_TARGET,
@@ -278,7 +288,7 @@ pub mod pallet {
 				);
 				SendError::Fees
 			})?;
-			Self::deposit_event(Event::FeesPaid { paying: fee_payer.into(), fees: fee });
+			Self::deposit_event(Event::FeesPaid { paying: fee_payer, fees: fee });
 			T::XcmSender::deliver(ticket)
 		}
 	}

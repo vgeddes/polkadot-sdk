@@ -149,6 +149,10 @@ impl snowbridge_pallet_inbound_queue_v2::Config for Runtime {
 		EthereumUniversalLocation,
 		AssetHubFromEthereum,
 	>;
+	type AccountToLocation = xcm_builder::AliasesIntoAccountId32<
+		xcm_config::RelayNetwork,
+		<Runtime as frame_system::Config>::AccountId,
+	>;
 }
 
 impl snowbridge_pallet_outbound_queue::Config for Runtime {
