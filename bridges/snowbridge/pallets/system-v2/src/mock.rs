@@ -8,6 +8,7 @@ use frame_support::{
 use sp_core::H256;
 
 use crate as snowbridge_system_v2;
+use frame_system::EnsureRootWithSuccess;
 use snowbridge_core::{
 	gwei, meth, sibling_sovereign_account, AllowSiblingsOnly, ParaId, PricingParameters, Rewards,
 };
@@ -20,7 +21,7 @@ use sp_runtime::{
 	traits::{AccountIdConversion, BlakeTwo256, IdentityLookup},
 	AccountId32, BuildStorage, FixedU128,
 };
-use xcm::prelude::*;
+use xcm::{opaque::latest::WESTEND_GENESIS_HASH, prelude::*};
 
 use crate::mock::pallet_xcm_origin::EnsureXcm;
 #[cfg(feature = "runtime-benchmarks")]
@@ -35,6 +36,7 @@ pub type AccountId = AccountId32;
 #[allow(dead_code)]
 #[frame_support::pallet]
 mod pallet_xcm_origin {
+	use codec::DecodeWithMemTracking;
 	use frame_support::{
 		pallet_prelude::*,
 		traits::{Contains, OriginTrait},
@@ -51,7 +53,7 @@ mod pallet_xcm_origin {
 
 	// Insert this custom Origin into the aggregate RuntimeOrigin
 	#[pallet::origin]
-	#[derive(PartialEq, Eq, Clone, Encode, Decode, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+	#[derive(PartialEq, Eq, Clone, Encode, Decode, DecodeWithMemTracking, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 	pub struct Origin(pub Location);
 
 	impl From<Location> for Origin {
@@ -178,7 +180,7 @@ impl SendMessageFeeProvider for MockOkOutboundQueueV1 {
 
 parameter_types! {
 	pub const AnyNetwork: Option<NetworkId> = None;
-	pub const RelayNetwork: Option<NetworkId> = Some(Polkadot);
+	pub const RelayNetwork: Option<NetworkId> = Some(NetworkId::ByGenesis(WESTEND_GENESIS_HASH));
 	pub const RelayLocation: Location = Location::parent();
 	pub UniversalLocation: InteriorLocation =
 		[GlobalConsensus(RelayNetwork::get().unwrap()), Parachain(1013)].into();
@@ -191,6 +193,7 @@ parameter_types! {
 	pub BridgeHubParaId: ParaId = ParaId::new(1002);
 	pub AssetHubParaId: ParaId = ParaId::new(1000);
 	pub TestParaId: u32 = 2000;
+	pub RootLocation: Location = Location::parent();
 }
 
 #[cfg(feature = "runtime-benchmarks")]
@@ -219,6 +222,7 @@ impl crate::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type OutboundQueue = MockOkOutboundQueue;
 	type FrontendOrigin = EnsureXcm<AllowFromAssetHub>;
+	type GovernanceOrigin = EnsureRootWithSuccess<AccountId, RootLocation>;
 	type WeightInfo = ();
 	#[cfg(feature = "runtime-benchmarks")]
 	type Helper = ();

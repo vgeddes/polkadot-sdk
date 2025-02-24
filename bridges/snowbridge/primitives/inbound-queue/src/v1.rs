@@ -3,8 +3,7 @@
 //! Converts messages from Ethereum to XCM messages
 
 use crate::{CallIndex, EthereumLocationsConverterFor};
-use codec::{Decode, Encode};
-use codec::DecodeWithMemTracking;
+use codec::{Decode, DecodeWithMemTracking, Encode};
 use core::marker::PhantomData;
 use frame_support::{traits::tokens::Balance as BalanceT, PalletError};
 use scale_info::TypeInfo;

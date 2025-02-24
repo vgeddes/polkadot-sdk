@@ -29,10 +29,8 @@ use xcm_executor::traits::ConvertLocation;
 
 #[derive(Encode, Decode, Debug, PartialEq, Clone, TypeInfo)]
 pub enum EthereumSystemFrontendCall {
-	#[codec(index = 1)]
-	CreateAgent { fee: u128 },
-	#[codec(index = 2)]
-	RegisterToken { asset_id: Box<VersionedLocation>, metadata: AssetMetadata, fee: u128 },
+	#[codec(index = 0)]
+	RegisterToken { asset_id: Box<VersionedLocation>, metadata: AssetMetadata },
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -122,6 +120,7 @@ fn send_weth_from_asset_hub_to_ethereum() {
 	});
 }
 
+#[test]
 pub fn register_relay_token_from_asset_hub_with_sudo() {
 	fund_on_bh();
 	register_assets_on_ah();
@@ -137,8 +136,7 @@ pub fn register_relay_token_from_asset_hub_with_sudo() {
 					name: "wnd".as_bytes().to_vec().try_into().unwrap(),
 					symbol: "wnd".as_bytes().to_vec().try_into().unwrap(),
 					decimals: 12,
-				},
-				REMOTE_FEE_AMOUNT_IN_ETHER
+				}
 			)
 		);
 	});
@@ -161,7 +159,6 @@ pub fn register_relay_token_from_asset_hub_user_origin() {
 					symbol: "wnd".as_bytes().to_vec().try_into().unwrap(),
 					decimals: 12,
 				},
-				REMOTE_FEE_AMOUNT_IN_ETHER
 			)
 		);
 	});
@@ -417,8 +414,6 @@ fn transact_with_agent_from_asset_hub() {
 
 	fund_on_bh();
 
-	register_agent_from_asset_hub();
-
 	register_assets_on_ah();
 
 	fund_on_ah();
@@ -548,7 +543,6 @@ fn register_token_from_penpal() {
 			EthereumSystemFrontendCall::RegisterToken {
 				asset_id: Box::new(VersionedLocation::from(foreign_asset_at_asset_hub)),
 				metadata: Default::default(),
-				fee: REMOTE_FEE_AMOUNT_IN_ETHER,
 			},
 		);
 
@@ -736,14 +730,15 @@ fn register_user_agent_from_penpal() {
 fn send_message_from_penpal_to_ethereum(sudo: bool) {
 	// bh
 	fund_on_bh();
-	register_user_agent_from_penpal();
 	// ah
 	register_assets_on_ah();
+	create_pools_on_ah();
 	register_pal_on_ah();
 	register_pal_on_bh();
 	fund_on_ah();
 	// penpal
 	set_trust_reserve_on_penpal();
+	register_assets_on_penpal();
 	fund_on_penpal();
 
 	PenpalB::execute_with(|| {

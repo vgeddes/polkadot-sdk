@@ -43,6 +43,7 @@ use crate::xcm_config::{RelayNetwork, XcmConfig, XcmRouter};
 #[cfg(feature = "runtime-benchmarks")]
 use benchmark_helpers::DoNothingRouter;
 use frame_support::{parameter_types, traits::Contains, weights::ConstantMultiplier};
+use frame_system::EnsureRootWithSuccess;
 use pallet_xcm::EnsureXcm;
 use sp_runtime::{
 	traits::{ConstU32, ConstU8, Keccak256},
@@ -61,6 +62,7 @@ pub type SnowbridgeExporter = EthereumBlobExporter<
 	snowbridge_core::AgentIdOf,
 	EthereumSystem,
 >;
+use hex_literal::hex;
 
 pub type SnowbridgeExporterV2 = EthereumBlobExporterV2<
 	UniversalLocation,
@@ -73,7 +75,7 @@ pub type SnowbridgeExporterV2 = EthereumBlobExporterV2<
 
 // Ethereum Bridge
 parameter_types! {
-	pub storage EthereumGatewayAddress: H160 = H160(hex_literal::hex!("b1185ede04202fe62d38f5db72f71e38ff3e8305"));
+	pub storage EthereumGatewayAddress: H160 = H160(hex!("b1185ede04202fe62d38f5db72f71e38ff3e8305"));
 }
 
 parameter_types! {
@@ -91,6 +93,7 @@ parameter_types! {
 	pub InboundQueueLocation: InteriorLocation = [PalletInstance(INBOUND_QUEUE_PALLET_INDEX_V2)].into();
 	pub SnowbridgeFrontendLocation: Location = Location::new(1,[Parachain(westend_runtime_constants::system_parachain::ASSET_HUB_ID),PalletInstance(FRONTEND_PALLET_INDEX)]);
 	pub AssethubLocation: Location = Location::new(1,[Parachain(westend_runtime_constants::system_parachain::ASSET_HUB_ID)]);
+	pub RootLocation: Location = Location::new(0,[]);
 	pub EthereumGlobalLocation: Location = Location::new(2, [GlobalConsensus(RelayNetwork::get())]);
 	pub AssetHubXCMFee: u128 = 1_000_000_000_000u128;
 	pub const DefaultMyRewardKind: BridgeReward = BridgeReward::Snowbridge;
@@ -197,25 +200,29 @@ impl snowbridge_pallet_outbound_queue_v2::Config for Runtime {
 parameter_types! {
 	pub const ChainForkVersions: ForkVersions = ForkVersions {
 		genesis: Fork {
-			version: [0, 0, 0, 0], // 0x00000000
+			version: hex!("00000000"),
 			epoch: 0,
 		},
 		altair: Fork {
-			version: [1, 0, 0, 0], // 0x01000000
+			version: hex!("01000000"),
 			epoch: 0,
 		},
 		bellatrix: Fork {
-			version: [2, 0, 0, 0], // 0x02000000
+			version: hex!("02000000"),
 			epoch: 0,
 		},
 		capella: Fork {
-			version: [3, 0, 0, 0], // 0x03000000
+			version: hex!("03000000"),
 			epoch: 0,
 		},
 		deneb: Fork {
-			version: [4, 0, 0, 0], // 0x04000000
+			version: hex!("04000000"),
 			epoch: 0,
-		}
+		},
+		electra: Fork {
+			version: hex!("05000000"),
+			epoch: 80000000000, // setting to a future epoch for local testing to remain on Deneb.
+		},
 	};
 }
 
@@ -223,24 +230,28 @@ parameter_types! {
 parameter_types! {
 	pub const ChainForkVersions: ForkVersions = ForkVersions {
 		genesis: Fork {
-			version: [144, 0, 0, 111], // 0x90000069
+			version: hex!("90000069"),
 			epoch: 0,
 		},
 		altair: Fork {
-			version: [144, 0, 0, 112], // 0x90000070
+			version: hex!("90000070"),
 			epoch: 50,
 		},
 		bellatrix: Fork {
-			version: [144, 0, 0, 113], // 0x90000071
+			version: hex!("90000071"),
 			epoch: 100,
 		},
 		capella: Fork {
-			version: [144, 0, 0, 114], // 0x90000072
+			version: hex!("90000072"),
 			epoch: 56832,
 		},
 		deneb: Fork {
-			version: [144, 0, 0, 115], // 0x90000073
+			version: hex!("90000073"),
 			epoch: 132608,
+		},
+		electra: Fork {
+			version: hex!("90000074"),
+			epoch: 222464, // https://github.com/ethereum/EIPs/pull/9322/files
 		},
 	};
 }
@@ -291,6 +302,7 @@ impl snowbridge_pallet_system_v2::Config for Runtime {
 	type OutboundQueue = EthereumOutboundQueueV2;
 	type FrontendOrigin = EnsureXcm<AllowFromEthereumFrontend>;
 	type WeightInfo = crate::weights::snowbridge_pallet_system_v2::WeightInfo<Runtime>;
+	type GovernanceOrigin = EnsureRootWithSuccess<crate::AccountId, RootLocation>;
 	#[cfg(feature = "runtime-benchmarks")]
 	type Helper = ();
 }

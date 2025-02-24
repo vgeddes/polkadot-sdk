@@ -41,7 +41,7 @@ hex = { workspace = true, default-features = true }
 [features]
 default = ["std"]
 std = [
-	"bp-relayers/std",
+    "bp-relayers/std",
 	"codec/std",
 	"ethabi/std",
 	"frame-support/std",
@@ -55,8 +55,9 @@ std = [
 	"sp-runtime/std",
 	"sp-std/std",
 	"xcm-builder/std",
-    "xcm-executor/std",
+	"xcm-executor/std",
 	"xcm/std",
+	"log/std"
 ]
 serde = ["dep:serde", "scale-info/serde"]
 runtime-benchmarks = [

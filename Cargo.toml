@@ -49,25 +49,25 @@ members = [
 	"bridges/snowbridge/pallets/ethereum-client",
 	"bridges/snowbridge/pallets/ethereum-client/fixtures",
 	"bridges/snowbridge/pallets/inbound-queue",
-    "bridges/snowbridge/pallets/inbound-queue-v2",
-    "bridges/snowbridge/pallets/inbound-queue-v2/fixtures",
+	"bridges/snowbridge/pallets/inbound-queue-v2",
+	"bridges/snowbridge/pallets/inbound-queue-v2/fixtures",
 	"bridges/snowbridge/pallets/inbound-queue/fixtures",
 	"bridges/snowbridge/pallets/outbound-queue",
-    "bridges/snowbridge/pallets/outbound-queue-v2",
-    "bridges/snowbridge/pallets/outbound-queue-v2/runtime-api",
+	"bridges/snowbridge/pallets/outbound-queue-v2",
+	"bridges/snowbridge/pallets/outbound-queue-v2/runtime-api",
 	"bridges/snowbridge/pallets/outbound-queue/runtime-api",
 	"bridges/snowbridge/pallets/system",
-    "bridges/snowbridge/pallets/system-frontend",
-    "bridges/snowbridge/pallets/system-v2",
-    "bridges/snowbridge/pallets/system-v2/runtime-api",
+	"bridges/snowbridge/pallets/system-frontend",
+	"bridges/snowbridge/pallets/system-v2",
+	"bridges/snowbridge/pallets/system-v2/runtime-api",
 	"bridges/snowbridge/pallets/system/runtime-api",
 	"bridges/snowbridge/primitives/beacon",
 	"bridges/snowbridge/primitives/core",
 	"bridges/snowbridge/primitives/ethereum",
-    "bridges/snowbridge/primitives/merkle-tree",
-    "bridges/snowbridge/primitives/inbound-queue",
-    "bridges/snowbridge/primitives/outbound-queue",
-    "bridges/snowbridge/primitives/verification",
+	"bridges/snowbridge/primitives/inbound-queue",
+	"bridges/snowbridge/primitives/merkle-tree",
+	"bridges/snowbridge/primitives/outbound-queue",
+	"bridges/snowbridge/primitives/verification",
 	"bridges/snowbridge/runtime/runtime-common",
 	"bridges/snowbridge/runtime/test-common",
 	"cumulus/bin/pov-validator",
@@ -564,21 +564,21 @@ members = [
 ]
 
 default-members = [
-    "cumulus/polkadot-omni-node",
-    "cumulus/polkadot-parachain",
-    "polkadot",
-    "substrate/bin/node/cli",
+	"cumulus/polkadot-omni-node",
+	"cumulus/polkadot-parachain",
+	"polkadot",
+	"substrate/bin/node/cli",
 ]
 
 [workspace.lints.rust]
 suspicious_double_ref_op = { level = "allow", priority = 2 }
 # `substrate_runtime` is a common `cfg` condition name used in the repo.
 unexpected_cfgs = { level = "warn", check-cfg = [
-    'cfg(build_opt_level, values("3"))',
-    'cfg(build_profile, values("debug", "release"))',
-    'cfg(enable_alloc_error_handler)',
-    'cfg(fuzzing)',
-    'cfg(substrate_runtime)',
+	'cfg(build_opt_level, values("3"))',
+	'cfg(build_profile, values("debug", "release"))',
+	'cfg(enable_alloc_error_handler)',
+	'cfg(fuzzing)',
+	'cfg(substrate_runtime)',
 ] }
 
 [workspace.lints.clippy]
@@ -833,17 +833,17 @@ http-body = { version = "1", default-features = false }
 http-body-util = { version = "0.1.2", default-features = false }
 hyper = { version = "1.3.1", default-features = false }
 hyper-rustls = { version = "0.27.3", default-features = false, features = [
-    "http1",
-    "http2",
-    "logging",
-    "ring",
-    "rustls-native-certs",
-    "tls12",
+	"http1",
+	"http2",
+	"logging",
+	"ring",
+	"rustls-native-certs",
+	"tls12",
 ] }
 hyper-util = { version = "0.1.5", default-features = false }
 impl-serde = { version = "0.5.0", default-features = false }
 impl-trait-for-tuples = { version = "0.2.2" }
-indexmap = { version = "2.0.0" }
+indexmap = { version = "2.7.1" }
 indicatif = { version = "0.17.7" }
 integer-sqrt = { version = "0.1.2" }
 ip_network = { version = "0.4.1" }
@@ -872,7 +872,7 @@ linked-hash-map = { version = "0.5.4" }
 linked_hash_set = { version = "0.1.4" }
 linregress = { version = "0.5.1" }
 lite-json = { version = "0.2.0", default-features = false }
-litep2p = { version = "0.9.0", features = ["websocket"] }
+litep2p = { version = "0.9.1", features = ["websocket"] }
 log = { version = "0.4.22", default-features = false }
 macro_magic = { version = "0.5.1" }
 maplit = { version = "1.0.2" }
@@ -1123,7 +1123,7 @@ polkavm-linker = "0.18.0"
 portpicker = { version = "0.1.1" }
 pretty_assertions = { version = "1.3.0" }
 primitive-types = { version = "0.13.1", default-features = false, features = [
-    "num-traits",
+	"num-traits",
 ] }
 proc-macro-crate = { version = "3.0.0" }
 proc-macro-warning = { version = "1.0.0", default-features = false }
@@ -1165,10 +1165,10 @@ rustc-hash = { version = "1.1.0" }
 rustc-hex = { version = "2.1.0", default-features = false }
 rustix = { version = "0.36.7", default-features = false }
 rustls = { version = "0.23.18", default-features = false, features = [
-    "logging",
-    "ring",
-    "std",
-    "tls12",
+	"logging",
+	"ring",
+	"std",
+	"tls12",
 ] }
 rustversion = { version = "1.0.17" }
 rusty-fork = { version = "0.3.0", default-features = false }
@@ -1255,6 +1255,7 @@ smoldot-light = { version = "0.9.0", default-features = false }
 snowbridge-beacon-primitives = { path = "bridges/snowbridge/primitives/beacon", default-features = false }
 snowbridge-core = { path = "bridges/snowbridge/primitives/core", default-features = false }
 snowbridge-ethereum = { path = "bridges/snowbridge/primitives/ethereum", default-features = false }
+snowbridge-inbound-queue-primitives = { path = "bridges/snowbridge/primitives/inbound-queue", default-features = false }
 snowbridge-merkle-tree = { path = "bridges/snowbridge/primitives/merkle-tree", default-features = false }
 snowbridge-outbound-queue-primitives = { path = "bridges/snowbridge/primitives/outbound-queue", default-features = false }
 snowbridge-outbound-queue-runtime-api = { path = "bridges/snowbridge/pallets/outbound-queue/runtime-api", default-features = false }
@@ -1270,12 +1271,11 @@ snowbridge-pallet-outbound-queue-v2 = { path = "bridges/snowbridge/pallets/outbo
 snowbridge-pallet-system = { path = "bridges/snowbridge/pallets/system", default-features = false }
 snowbridge-pallet-system-frontend = { path = "bridges/snowbridge/pallets/system-frontend", default-features = false }
 snowbridge-pallet-system-v2 = { path = "bridges/snowbridge/pallets/system-v2", default-features = false }
-snowbridge-inbound-queue-primitives = { path = "bridges/snowbridge/primitives/inbound-queue", default-features = false }
-snowbridge-verification-primitives = { path = "bridges/snowbridge/primitives/verification", default-features = false }
 snowbridge-runtime-common = { path = "bridges/snowbridge/runtime/runtime-common", default-features = false }
 snowbridge-runtime-test-common = { path = "bridges/snowbridge/runtime/test-common", default-features = false }
 snowbridge-system-runtime-api = { path = "bridges/snowbridge/pallets/system/runtime-api", default-features = false }
 snowbridge-system-runtime-api-v2 = { path = "bridges/snowbridge/pallets/system-v2/runtime-api", default-features = false }
+snowbridge-verification-primitives = { path = "bridges/snowbridge/primitives/verification", default-features = false }
 soketto = { version = "0.8.0" }
 solochain-template-runtime = { path = "templates/solochain/runtime" }
 sp-api = { path = "substrate/primitives/api", default-features = false }
@@ -1399,12 +1399,12 @@ trie-bench = { version = "0.39.0" }
 trie-db = { version = "0.29.1", default-features = false }
 trie-root = { version = "0.18.0", default-features = false }
 trie-standardmap = { version = "0.16.0" }
-trybuild = { version = "1.0.89" }
+trybuild = { version = "1.0.103" }
 tt-call = { version = "1.0.8" }
 tuplex = { version = "0.1", default-features = false }
 twox-hash = { version = "1.6.3", default-features = false }
 unsigned-varint = { version = "0.7.2" }
-url = { version = "2.4.0" }
+url = { version = "2.5.4" }
 void = { version = "1.0.2" }
 w3f-bls = { version = "0.1.3", default-features = false }
 wait-timeout = { version = "0.2" }
