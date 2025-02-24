@@ -76,7 +76,7 @@ fn process_message_yields_on_max_messages_per_block() {
 				impl_address: Default::default(),
 				impl_code_hash: Default::default(),
 				initializer: Initializer {
-					params: (0..1000).map(|_| 1u8).collect::<Vec<u8>>(),
+					params: (0..512).map(|_| 1u8).collect::<Vec<u8>>(),
 					maximum_required_gas: 0,
 				},
 			}])
