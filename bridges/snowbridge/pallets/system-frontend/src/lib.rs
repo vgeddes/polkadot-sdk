@@ -37,7 +37,7 @@ pub const LOG_TARGET: &str = "snowbridge-system-frontend";
 
 #[derive(Encode, Decode, Debug, PartialEq, Clone, TypeInfo)]
 pub enum EthereumSystemCall {
-	#[codec(index = 2)]
+	#[codec(index = 0)]
 	RegisterToken { asset_id: Box<VersionedLocation>, metadata: AssetMetadata },
 }
 
