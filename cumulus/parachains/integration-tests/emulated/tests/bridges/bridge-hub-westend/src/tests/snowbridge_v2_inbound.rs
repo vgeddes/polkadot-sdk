@@ -40,6 +40,7 @@ use sp_core::{H160, H256};
 use sp_runtime::MultiAddress;
 use xcm::opaque::latest::AssetTransferFilter::ReserveDeposit;
 use xcm_executor::traits::ConvertLocation;
+use snowbridge_inbound_queue_primitives::v2::XcmCommand;
 
 const TOKEN_AMOUNT: u128 = 100_000_000_000;
 
@@ -51,7 +52,7 @@ const TOKEN_ID: [u8; 20] = hex!("c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2");
 const CHAIN_ID: u64 = 11155111u64;
 
 #[test]
-fn register_token_v2() {
+fn register_token_old_v2() {
 	let relayer = BridgeHubWestendSender::get();
 	let receiver = AssetHubWestendReceiver::get();
 	BridgeHubWestend::fund_accounts(vec![(relayer.clone(), INITIAL_FUND)]);
@@ -116,7 +117,7 @@ fn register_token_v2() {
 			nonce: 1,
 			origin,
 			assets: vec![],
-			xcm: encoded_xcm,
+			xcm: XcmCommand::Raw(encoded_xcm),
 			claimer: Some(claimer_bytes),
 			// Used to pay the asset creation deposit.
 			value: 9_000_000_000_000u128,
@@ -124,7 +125,89 @@ fn register_token_v2() {
 			relayer_fee: 1_500_000_000_000u128,
 		};
 
-		EthereumInboundQueueV2::process_message(relayer_location, message).unwrap();
+		EthereumInboundQueueV2::process_message(relayer, message).unwrap();
+
+		assert_expected_events!(
+			BridgeHubWestend,
+			vec![RuntimeEvent::XcmpQueue(cumulus_pallet_xcmp_queue::Event::XcmpMessageSent { .. }) => {},]
+		);
+	});
+
+	AssetHubWestend::execute_with(|| {
+		type RuntimeEvent = <AssetHubWestend as Chain>::RuntimeEvent;
+
+		assert_expected_events!(
+			AssetHubWestend,
+			vec![
+				// message processed successfully
+				RuntimeEvent::MessageQueue(
+					pallet_message_queue::Event::Processed { success: true, .. }
+				) => {},
+				// Check that the token was created as a foreign asset on AssetHub
+				RuntimeEvent::ForeignAssets(pallet_assets::Event::Created { asset_id, owner, .. }) => {
+					asset_id: *asset_id == erc20_token_location(token),
+					owner: *owner == snowbridge_sovereign(),
+				},
+				// Check that excess fees were paid to the claimer
+				RuntimeEvent::ForeignAssets(pallet_assets::Event::Issued { asset_id, owner, .. }) => {
+					asset_id: *asset_id == eth_location(),
+					owner: *owner == receiver.clone().into(),
+				},
+			]
+		);
+
+		let events = AssetHubWestend::events();
+		// Check that no assets were trapped
+		assert!(
+			!events.iter().any(|event| matches!(
+				event,
+				RuntimeEvent::PolkadotXcm(pallet_xcm::Event::AssetsTrapped { .. })
+			)),
+			"Assets were trapped, should not happen."
+		);
+	});
+}
+#[test]
+fn register_token_v2() {
+	let relayer = BridgeHubWestendSender::get();
+	let receiver = AssetHubWestendReceiver::get();
+	BridgeHubWestend::fund_accounts(vec![(relayer.clone(), INITIAL_FUND)]);
+	AssetHubWestend::fund_accounts(vec![(snowbridge_sovereign(), INITIAL_FUND)]);
+
+	set_up_eth_and_dot_pool();
+
+	let claimer = Location::new(0, AccountId32 { network: None, id: receiver.clone().into() });
+	let claimer_bytes = claimer.encode();
+
+	let bridge_owner = EthereumLocationsConverterFor::<[u8; 32]>::from_chain_id(&CHAIN_ID);
+
+	let token: H160 = TOKEN_ID.into();
+	let asset_id = erc20_token_location(token.into());
+
+	let dot_asset = Location::new(1, Here);
+	let dot_fee: xcm::prelude::Asset = (dot_asset, CreateAssetDeposit::get()).into();
+
+	let eth_asset_value = 9_000_000_000_000u128;
+	let asset_deposit: xcm::prelude::Asset = (eth_location(), eth_asset_value).into();
+
+	BridgeHubWestend::execute_with(|| {
+		type RuntimeEvent = <BridgeHubWestend as Chain>::RuntimeEvent;
+		let origin = EthereumGatewayAddress::get();
+
+		let message = Message {
+			gateway: origin,
+			nonce: 1,
+			origin,
+			assets: vec![],
+			xcm: XcmCommand::TokenRegistration { token, network: 0 },
+			claimer: Some(claimer_bytes),
+			// Used to pay the asset creation deposit.
+			value: 9_000_000_000_000u128,
+			execution_fee: 1_500_000_000_000u128,
+			relayer_fee: 1_500_000_000_000u128,
+		};
+
+		EthereumInboundQueueV2::process_message(relayer, message).unwrap();
 
 		assert_expected_events!(
 			BridgeHubWestend,
@@ -170,8 +253,6 @@ fn register_token_v2() {
 #[test]
 fn send_token_v2() {
 	let relayer = BridgeHubWestendSender::get();
-	let relayer_location =
-		Location::new(0, AccountId32 { network: None, id: relayer.clone().into() });
 
 	let token: H160 = TOKEN_ID.into();
 	let token_location = erc20_token_location(token);
@@ -212,14 +293,14 @@ fn send_token_v2() {
 			nonce: 1,
 			origin,
 			assets,
-			xcm: versioned_message_xcm.encode(),
+			xcm: XcmCommand::Raw(versioned_message_xcm.encode()),
 			claimer: Some(claimer_bytes),
 			value: 1_500_000_000_000u128,
 			execution_fee: 1_500_000_000_000u128,
 			relayer_fee: 1_500_000_000_000u128,
 		};
 
-		EthereumInboundQueueV2::process_message(relayer_location, message).unwrap();
+		EthereumInboundQueueV2::process_message(relayer, message).unwrap();
 
 		assert_expected_events!(
 			BridgeHubWestend,
@@ -273,8 +354,6 @@ fn send_token_v2() {
 #[test]
 fn send_weth_v2() {
 	let relayer = BridgeHubWestendSender::get();
-	let relayer_location =
-		Location::new(0, AccountId32 { network: None, id: relayer.clone().into() });
 
 	let beneficiary_acc_id: H256 = H256::random();
 	let beneficiary_acc_bytes: [u8; 32] = beneficiary_acc_id.into();
@@ -311,14 +390,14 @@ fn send_weth_v2() {
 			nonce: 1,
 			origin,
 			assets,
-			xcm: versioned_message_xcm.encode(),
+			xcm: XcmCommand::Raw(versioned_message_xcm.encode()),
 			claimer: Some(claimer_bytes),
 			value: 3_500_000_000_000u128,
 			execution_fee: 1_500_000_000_000u128,
 			relayer_fee: 1_500_000_000_000u128,
 		};
 
-		EthereumInboundQueueV2::process_message(relayer_location, message).unwrap();
+		EthereumInboundQueueV2::process_message(relayer, message).unwrap();
 
 		assert_expected_events!(
 			BridgeHubWestend,
@@ -373,8 +452,6 @@ fn send_weth_v2() {
 #[test]
 fn register_and_send_multiple_tokens_v2() {
 	let relayer = BridgeHubWestendSender::get();
-	let relayer_location =
-		Location::new(0, AccountId32 { network: None, id: relayer.clone().into() });
 
 	let token: H160 = TOKEN_ID.into();
 	let token_location = erc20_token_location(token);
@@ -463,14 +540,14 @@ fn register_and_send_multiple_tokens_v2() {
 			nonce: 1,
 			origin,
 			assets,
-			xcm: versioned_message_xcm.encode(),
+			xcm: XcmCommand::Raw(versioned_message_xcm.encode()),
 			claimer: Some(claimer_bytes),
 			value: 3_500_000_000_000u128,
 			execution_fee: 1_500_000_000_000u128,
 			relayer_fee: 1_500_000_000_000u128,
 		};
 
-		EthereumInboundQueueV2::process_message(relayer_location, message).unwrap();
+		EthereumInboundQueueV2::process_message(relayer, message).unwrap();
 
 		assert_expected_events!(
 			BridgeHubWestend,
@@ -536,8 +613,6 @@ fn register_and_send_multiple_tokens_v2() {
 #[test]
 fn send_token_to_penpal_v2() {
 	let relayer = BridgeHubWestendSender::get();
-	let relayer_location =
-		Location::new(0, AccountId32 { network: None, id: relayer.clone().into() });
 
 	let token: H160 = TOKEN_ID.into();
 	let token_location = erc20_token_location(token);
@@ -641,14 +716,14 @@ fn send_token_to_penpal_v2() {
 			nonce: 1,
 			origin,
 			assets,
-			xcm: versioned_message_xcm.encode(),
+			xcm: XcmCommand::Raw(versioned_message_xcm.encode()),
 			claimer: Some(claimer_bytes),
 			value: 3_500_000_000_000u128,
 			execution_fee: 1_500_000_000_000u128,
 			relayer_fee: 1_500_000_000_000u128,
 		};
 
-		EthereumInboundQueueV2::process_message(relayer_location, message).unwrap();
+		EthereumInboundQueueV2::process_message(relayer, message).unwrap();
 
 		assert_expected_events!(
 			BridgeHubWestend,
@@ -730,8 +805,6 @@ fn send_token_to_penpal_v2() {
 #[test]
 fn send_foreign_erc20_token_back_to_polkadot() {
 	let relayer = BridgeHubWestendSender::get();
-	let relayer_location =
-		Location::new(0, AccountId32 { network: None, id: relayer.clone().into() });
 
 	let claimer = AccountId32 { network: None, id: H256::random().into() };
 	let claimer_bytes = claimer.encode();
@@ -811,14 +884,14 @@ fn send_foreign_erc20_token_back_to_polkadot() {
 			nonce: 1,
 			origin,
 			assets,
-			xcm: versioned_message_xcm.encode(),
+			xcm: XcmCommand::Raw(versioned_message_xcm.encode()),
 			claimer: Some(claimer_bytes),
 			value: 1_500_000_000_000u128,
 			execution_fee: 3_500_000_000_000u128,
 			relayer_fee: 1_500_000_000_000u128,
 		};
 
-		EthereumInboundQueueV2::process_message(relayer_location, message).unwrap();
+		EthereumInboundQueueV2::process_message(relayer, message).unwrap();
 
 		assert_expected_events!(
 			BridgeHubWestend,
@@ -867,8 +940,6 @@ fn send_foreign_erc20_token_back_to_polkadot() {
 #[test]
 fn invalid_xcm_traps_funds_on_ah() {
 	let relayer = BridgeHubWestendSender::get();
-	let relayer_location =
-		Location::new(0, AccountId32 { network: None, id: relayer.clone().into() });
 
 	let token: H160 = TOKEN_ID.into();
 	let claimer = AccountId32 { network: None, id: H256::random().into() };
@@ -900,14 +971,14 @@ fn invalid_xcm_traps_funds_on_ah() {
 			nonce: 1,
 			origin,
 			assets,
-			xcm: instructions.to_vec(),
+			xcm: XcmCommand::Raw(instructions.to_vec()),
 			claimer: Some(claimer_bytes),
 			value: 1_500_000_000_000u128,
 			execution_fee: 1_500_000_000_000u128,
 			relayer_fee: 1_500_000_000_000u128,
 		};
 
-		EthereumInboundQueueV2::process_message(relayer_location, message).unwrap();
+		EthereumInboundQueueV2::process_message(relayer, message).unwrap();
 
 		assert_expected_events!(
 			BridgeHubWestend,
@@ -929,8 +1000,6 @@ fn invalid_xcm_traps_funds_on_ah() {
 #[test]
 fn invalid_claimer_does_not_fail_the_message() {
 	let relayer = BridgeHubWestendSender::get();
-	let relayer_location =
-		Location::new(0, AccountId32 { network: None, id: relayer.clone().into() });
 
 	let beneficiary_acc: [u8; 32] = H256::random().into();
 	let beneficiary = Location::new(0, AccountId32 { network: None, id: beneficiary_acc.into() });
@@ -961,7 +1030,7 @@ fn invalid_claimer_does_not_fail_the_message() {
 			nonce: 1,
 			origin,
 			assets,
-			xcm: versioned_message_xcm.encode(),
+			xcm: XcmCommand::Raw(versioned_message_xcm.encode()),
 			// Set an invalid claimer
 			claimer: Some(hex!("2b7ce7bc7e87e4d6619da21487c7a53f").to_vec()),
 			value: 1_500_000_000_000u128,
@@ -969,7 +1038,7 @@ fn invalid_claimer_does_not_fail_the_message() {
 			relayer_fee: 1_500_000_000_000u128,
 		};
 
-		EthereumInboundQueueV2::process_message(relayer_location, message).unwrap();
+		EthereumInboundQueueV2::process_message(relayer, message).unwrap();
 
 		assert_expected_events!(
 			BridgeHubWestend,

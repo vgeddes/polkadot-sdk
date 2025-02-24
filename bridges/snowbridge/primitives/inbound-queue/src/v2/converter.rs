@@ -19,6 +19,8 @@ use super::{message::*, traits::*};
 use crate::{CallIndex, EthereumLocationsConverterFor};
 use sp_runtime::MultiAddress;
 
+const MINIMUM_DEPOSIT: u128 = 1;
+
 /// Representation of an intermediate parsed message, before final
 /// conversion to XCM.
 #[derive(Clone, RuntimeDebug)]
@@ -117,10 +119,10 @@ where
 						}
 					}
 				},
-				XcmCommand::TokenRegistration { token, network: _ } => {
+				XcmCommand::TokenRegistration { token, network } => {
 					let chain_id = match EthereumNetwork::get() {
 						Ethereum { chain_id } => chain_id,
-						_ => panic!("checked statically, qed"),
+						_ => return Err(ConvertMessageError::InvalidNetwork),
 					};
 					let bridge_owner =
 						EthereumLocationsConverterFor::<[u8; 32]>::from_chain_id(&chain_id);
@@ -130,32 +132,48 @@ where
 					let asset_deposit: xcm::prelude::Asset =
 						(ether_location.clone(), message.value).into();
 
-					let instructions = vec![
-						// Exchange eth for dot to pay the asset creation deposit
-						ExchangeAsset {
-							give: asset_deposit.clone().into(),
-							want: dot_fee.clone().into(),
-							maximal: false,
+					let create_call_index: [u8; 2] = CreateAssetCall::get();
+					let asset_id = Location::new(
+						2,
+						[GlobalConsensus(EthereumNetwork::get()), AccountKey20 { network: None, key: (*token).into() }],
+					);
+
+					match *network {
+						// Polkadot
+						0 => {
+							let instructions = vec![
+								// Exchange eth for dot to pay the asset creation deposit
+								ExchangeAsset {
+									give: asset_deposit.clone().into(),
+									want: dot_fee.clone().into(),
+									maximal: false,
+								},
+								// Deposit the dot deposit into the bridge sovereign account (where the asset
+								// creation fee will be deducted from)
+								DepositAsset { assets: dot_fee.into(), beneficiary: bridge_owner.into() },
+								// Call to create the asset.
+								Transact {
+									origin_kind: OriginKind::Xcm,
+									fallback_max_weight: None,
+									call: (
+										create_call_index,
+										asset_id,
+										MultiAddress::<[u8; 32], ()>::Id(bridge_owner.into()),
+										MINIMUM_DEPOSIT,
+									)
+										.encode()
+										.into(),
+								},
+								ExpectTransactStatus(MaybeErrorCode::Success),
+							];
+							remote_xcm = instructions.into();
 						},
-						// Deposit the dot deposit into the bridge sovereign account (where the asset
-						// creation fee will be deducted from)
-						DepositAsset { assets: dot_fee.into(), beneficiary: bridge_owner.into() },
-						// Call to create the asset.
-						Transact {
-							origin_kind: OriginKind::Xcm,
-							fallback_max_weight: None,
-							call: (
-								CreateAssetCall::get(),
-								token,
-								MultiAddress::<[u8; 32], ()>::Id(bridge_owner.into()),
-								1u128,
-							)
-								.encode()
-								.into(),
-						},
-						ExpectTransactStatus(MaybeErrorCode::Success),
-					];
-					remote_xcm = instructions.into();
+						// Kusama
+						1 => {
+							// TODO
+						}
+						_ => ()
+					}
 				},
 			}
 
@@ -289,6 +307,8 @@ where
 
 		let mut reserve_deposit_assets = vec![];
 		let mut reserve_withdraw_assets = vec![];
+
+
 
 		for asset in message.assets {
 			match asset {

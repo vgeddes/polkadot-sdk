@@ -20,4 +20,6 @@ pub enum ConvertMessageError {
 	InvalidAsset,
 	/// Cannot reachor a foreign ERC-20 asset location.
 	CannotReanchor,
+	/// Invalid network specified (not from Ethereum)
+	InvalidNetwork
 }
