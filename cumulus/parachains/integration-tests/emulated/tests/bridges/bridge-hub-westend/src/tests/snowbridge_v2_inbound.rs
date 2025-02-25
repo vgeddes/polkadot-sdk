@@ -19,6 +19,7 @@ use crate::{
 		set_up_eth_and_dot_pool_on_penpal, snowbridge_sovereign, weth_location,
 	},
 };
+use crate::tests::snowbridge_common::set_up_eth_and_dot_pool_on_rococo;
 use asset_hub_westend_runtime::ForeignAssets;
 use bridge_hub_westend_runtime::{
 	bridge_to_ethereum_config::{CreateAssetCall, CreateAssetDeposit, EthereumGatewayAddress},
@@ -52,7 +53,7 @@ const TOKEN_ID: [u8; 20] = hex!("c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2");
 const CHAIN_ID: u64 = 11155111u64;
 
 #[test]
-fn register_token_old_v2() {
+fn register_token_v2() {
 	let relayer = BridgeHubWestendSender::get();
 	let receiver = AssetHubWestendReceiver::get();
 	BridgeHubWestend::fund_accounts(vec![(relayer.clone(), INITIAL_FUND)]);
@@ -62,9 +63,6 @@ fn register_token_old_v2() {
 
 	let claimer = Location::new(0, AccountId32 { network: None, id: receiver.clone().into() });
 	let claimer_bytes = claimer.encode();
-
-	let relayer_location =
-		Location::new(0, AccountId32 { network: None, id: relayer.clone().into() });
 
 	let bridge_owner = EthereumLocationsConverterFor::<[u8; 32]>::from_chain_id(&CHAIN_ID);
 
@@ -79,45 +77,14 @@ fn register_token_old_v2() {
 
 	BridgeHubWestend::execute_with(|| {
 		type RuntimeEvent = <BridgeHubWestend as Chain>::RuntimeEvent;
-		let instructions = vec![
-			// Exchange eth for dot to pay the asset creation deposit
-			ExchangeAsset {
-				give: asset_deposit.clone().into(),
-				want: dot_fee.clone().into(),
-				maximal: false,
-			},
-			// Deposit the dot deposit into the bridge sovereign account (where the asset creation
-			// fee will be deducted from)
-			DepositAsset { assets: dot_fee.into(), beneficiary: bridge_owner.into() },
-			// Call to create the asset.
-			Transact {
-				origin_kind: OriginKind::Xcm,
-				fallback_max_weight: None,
-				call: (
-					CreateAssetCall::get(),
-					asset_id,
-					MultiAddress::<[u8; 32], ()>::Id(bridge_owner.into()),
-					1u128,
-				)
-					.encode()
-					.into(),
-			},
-			ExpectTransactStatus(MaybeErrorCode::Success),
-			RefundSurplus,
-			DepositAsset { assets: Wild(All), beneficiary: claimer.into() },
-		];
-		let xcm: Xcm<()> = instructions.into();
-		let versioned_message_xcm = VersionedXcm::V5(xcm);
 		let origin = EthereumGatewayAddress::get();
-
-		let encoded_xcm = versioned_message_xcm.encode();
 
 		let message = Message {
 			gateway: origin,
 			nonce: 1,
 			origin,
 			assets: vec![],
-			xcm: XcmCommand::Raw(encoded_xcm),
+			xcm: XcmCommand::TokenRegistration { token, network: 0 },
 			claimer: Some(claimer_bytes),
 			// Used to pay the asset creation deposit.
 			value: 9_000_000_000_000u128,
@@ -167,14 +134,15 @@ fn register_token_old_v2() {
 		);
 	});
 }
+
 #[test]
-fn register_token_v2() {
+fn register_token_on_rococo_v2() {
 	let relayer = BridgeHubWestendSender::get();
 	let receiver = AssetHubWestendReceiver::get();
 	BridgeHubWestend::fund_accounts(vec![(relayer.clone(), INITIAL_FUND)]);
 	AssetHubWestend::fund_accounts(vec![(snowbridge_sovereign(), INITIAL_FUND)]);
 
-	set_up_eth_and_dot_pool();
+	set_up_eth_and_dot_pool_on_rococo();
 
 	let claimer = Location::new(0, AccountId32 { network: None, id: receiver.clone().into() });
 	let claimer_bytes = claimer.encode();
@@ -199,7 +167,7 @@ fn register_token_v2() {
 			nonce: 1,
 			origin,
 			assets: vec![],
-			xcm: XcmCommand::TokenRegistration { token, network: 0 },
+			xcm: XcmCommand::TokenRegistration { token, network: 1 },
 			claimer: Some(claimer_bytes),
 			// Used to pay the asset creation deposit.
 			value: 9_000_000_000_000u128,
