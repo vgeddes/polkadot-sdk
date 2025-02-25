@@ -36,6 +36,7 @@ impl From<RewardPaymentError> for DispatchError {
 }
 
 pub struct NoOpReward;
+
 /// Reward payment procedure that sends a XCM to AssetHub to mint the reward (foreign asset)
 /// into the provided beneficiary account.
 pub struct PayAccountOnLocation<
