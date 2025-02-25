@@ -28,7 +28,7 @@ use frame_support::{pallet_prelude::*, traits::EnsureOriginWithArg};
 use frame_system::pallet_prelude::*;
 use snowbridge_core::AssetMetadata;
 #[cfg(feature = "runtime-benchmarks")]
-use snowbridge_test_helper_primitives::BenchmarkHelper;
+use snowbridge_test_helper_primitives::benchmark_helpers::BenchmarkHelper;
 use sp_std::prelude::*;
 use xcm::{
 	latest::{validate_send, XcmHash},

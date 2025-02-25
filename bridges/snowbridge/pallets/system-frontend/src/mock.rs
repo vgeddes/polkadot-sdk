@@ -6,7 +6,7 @@ use frame_support::{
 	derive_impl, parameter_types,
 	traits::{AsEnsureOriginWithArg, Everything},
 };
-pub use snowbridge_test_helper_primitives::{xcm_origin::pallet_xcm_origin, *};
+pub use snowbridge_test_helper_primitives::{mock_origin::pallet_xcm_origin, mock_xcm::*};
 use sp_core::H256;
 use sp_runtime::{
 	traits::{BlakeTwo256, IdentityLookup},
@@ -15,7 +15,7 @@ use sp_runtime::{
 use xcm::prelude::*;
 
 #[cfg(feature = "runtime-benchmarks")]
-use snowbridge_test_helper_primitives::BenchmarkHelper;
+use snowbridge_test_helper_primitives::benchmark_helpers::BenchmarkHelper;
 
 type Block = frame_system::mocking::MockBlock<Test>;
 type AccountId = AccountId32;

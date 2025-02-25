@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2023 Snowfork <hello@snowfork.com>
+
 // A stripped-down version of pallet-xcm that only inserts an XCM origin into the runtime
 #[frame_support::pallet]
 pub mod pallet_xcm_origin {

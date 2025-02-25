@@ -41,7 +41,7 @@ use snowbridge_outbound_queue_primitives::{
 };
 use snowbridge_pallet_system::{ForeignToNativeId, NativeToForeignId};
 #[cfg(feature = "runtime-benchmarks")]
-use snowbridge_test_helper_primitives::BenchmarkHelper;
+use snowbridge_test_helper_primitives::benchmark_helpers::BenchmarkHelper;
 use sp_core::{H160, H256};
 use sp_io::hashing::blake2_256;
 use sp_runtime::traits::MaybeEquivalence;

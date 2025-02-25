@@ -14,8 +14,7 @@ use snowbridge_core::{
 };
 
 pub use snowbridge_test_helper_primitives::{
-	xcm_origin::{pallet_xcm_origin, pallet_xcm_origin::EnsureXcm},
-	*,
+	mock_origin::pallet_xcm_origin, mock_outbound_queue::*,
 };
 use sp_runtime::{
 	traits::{AccountIdConversion, BlakeTwo256, IdentityLookup},
@@ -24,7 +23,7 @@ use sp_runtime::{
 use xcm::{opaque::latest::WESTEND_GENESIS_HASH, prelude::*};
 
 #[cfg(feature = "runtime-benchmarks")]
-use snowbridge_test_helper_primitives::BenchmarkHelper;
+use snowbridge_test_helper_primitives::benchmark_helpers::BenchmarkHelper;
 
 type Block = frame_system::mocking::MockBlock<Test>;
 type Balance = u128;
@@ -114,7 +113,7 @@ impl Contains<Location> for AllowFromAssetHub {
 impl crate::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type OutboundQueue = MockOkOutboundQueue;
-	type FrontendOrigin = EnsureXcm<AllowFromAssetHub>;
+	type FrontendOrigin = pallet_xcm_origin::EnsureXcm<AllowFromAssetHub>;
 	type GovernanceOrigin = EnsureRootWithSuccess<AccountId, RootLocation>;
 	type WeightInfo = ();
 	#[cfg(feature = "runtime-benchmarks")]
@@ -142,7 +141,7 @@ impl snowbridge_pallet_system::BenchmarkHelper<RuntimeOrigin> for () {
 impl snowbridge_pallet_system::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type OutboundQueue = MockOkOutboundQueueV1;
-	type SiblingOrigin = EnsureXcm<AllowSiblingsOnly>;
+	type SiblingOrigin = pallet_xcm_origin::EnsureXcm<AllowSiblingsOnly>;
 	type AgentIdOf = snowbridge_core::AgentIdOf;
 	type Token = Balances;
 	type TreasuryAccount = TreasuryAccount;

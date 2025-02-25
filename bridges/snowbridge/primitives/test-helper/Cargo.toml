@@ -16,7 +16,6 @@ codec = { workspace = true }
 hex-literal = { workspace = true, default-features = true }
 log = { workspace = true }
 scale-info = { features = ["derive"], workspace = true }
-polkadot-parachain-primitives = { workspace = true }
 xcm = { workspace = true }
 xcm-builder = { workspace = true }
 frame-benchmarking = { optional = true, workspace = true }
@@ -41,7 +40,6 @@ std = [
 	"frame-benchmarking?/std",
 	"frame-support/std",
 	"frame-system/std",
-	"polkadot-parachain-primitives/std",
 	"pallet-xcm/std",
 	"scale-info/std",
 	"sp-arithmetic/std",
