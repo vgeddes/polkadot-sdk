@@ -36,6 +36,7 @@ pallet-assets-freezer = { workspace = true }
 pallet-aura = { workspace = true }
 pallet-authorship = { workspace = true }
 pallet-balances = { workspace = true }
+pallet-migrations = { workspace = true }
 pallet-multisig = { workspace = true }
 pallet-nft-fractionalization = { workspace = true }
 pallet-nfts = { workspace = true }
@@ -106,9 +107,9 @@ bp-asset-hub-westend = { workspace = true }
 bp-bridge-hub-rococo = { workspace = true }
 bp-bridge-hub-westend = { workspace = true }
 pallet-xcm-bridge-hub-router = { workspace = true }
-snowbridge-pallet-system-frontend = { workspace = true }
 snowbridge-inbound-queue-primitives = { workspace = true }
 snowbridge-outbound-queue-primitives = { workspace = true }
+snowbridge-pallet-system-frontend = { workspace = true }
 
 [dev-dependencies]
 asset-test-utils = { workspace = true, default-features = true }
@@ -140,6 +141,7 @@ runtime-benchmarks = [
 	"pallet-balances/runtime-benchmarks",
 	"pallet-collator-selection/runtime-benchmarks",
 	"pallet-message-queue/runtime-benchmarks",
+	"pallet-migrations/runtime-benchmarks",
 	"pallet-multisig/runtime-benchmarks",
 	"pallet-nft-fractionalization/runtime-benchmarks",
 	"pallet-nfts/runtime-benchmarks",
@@ -156,8 +158,8 @@ runtime-benchmarks = [
 	"parachains-common/runtime-benchmarks",
 	"polkadot-parachain-primitives/runtime-benchmarks",
 	"polkadot-runtime-common/runtime-benchmarks",
-	"snowbridge-pallet-system-frontend/runtime-benchmarks",
 	"snowbridge-inbound-queue-primitives/runtime-benchmarks",
+	"snowbridge-pallet-system-frontend/runtime-benchmarks",
 	"sp-runtime/runtime-benchmarks",
 	"xcm-builder/runtime-benchmarks",
 	"xcm-executor/runtime-benchmarks",
@@ -185,6 +187,7 @@ try-runtime = [
 	"pallet-balances/try-runtime",
 	"pallet-collator-selection/try-runtime",
 	"pallet-message-queue/try-runtime",
+	"pallet-migrations/try-runtime",
 	"pallet-multisig/try-runtime",
 	"pallet-nft-fractionalization/try-runtime",
 	"pallet-nfts/try-runtime",
@@ -239,6 +242,7 @@ std = [
 	"pallet-balances/std",
 	"pallet-collator-selection/std",
 	"pallet-message-queue/std",
+	"pallet-migrations/std",
 	"pallet-multisig/std",
 	"pallet-nft-fractionalization/std",
 	"pallet-nfts-runtime-api/std",
@@ -262,9 +266,9 @@ std = [
 	"primitive-types/std",
 	"scale-info/std",
 	"serde_json/std",
-	"snowbridge-pallet-system-frontend/std",
 	"snowbridge-inbound-queue-primitives/std",
 	"snowbridge-outbound-queue-primitives/std",
+	"snowbridge-pallet-system-frontend/std",
 	"sp-api/std",
 	"sp-block-builder/std",
 	"sp-consensus-aura/std",

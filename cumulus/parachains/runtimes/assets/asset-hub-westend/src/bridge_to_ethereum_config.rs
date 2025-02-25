@@ -17,7 +17,7 @@
 use crate::{
 	xcm_config,
 	xcm_config::{AssetTransactors, XcmConfig},
-	Runtime, RuntimeEvent, RuntimeOrigin,
+	Runtime, RuntimeEvent,
 };
 use assets_common::matching::FromSiblingParachain;
 use frame_support::{parameter_types, traits::Everything};
@@ -26,15 +26,15 @@ use testnet_parachains_constants::westend::snowbridge::EthereumNetwork;
 use xcm::prelude::{Asset, InteriorLocation, Location, PalletInstance, Parachain};
 use xcm_executor::XcmExecutor;
 
+use crate::xcm_config::UniversalLocation;
 #[cfg(not(feature = "runtime-benchmarks"))]
 use crate::xcm_config::XcmRouter;
-use crate::xcm_config::{LocalOriginToLocation, UniversalLocation};
 #[cfg(feature = "runtime-benchmarks")]
 use benchmark_helpers::DoNothingRouter;
 use frame_support::traits::{
 	ContainsPair, EitherOf, EnsureOrigin, EnsureOriginWithArg, OriginTrait,
 };
-use xcm_builder::EnsureXcmOrigin;
+use frame_system::EnsureRootWithSuccess;
 
 #[cfg(feature = "runtime-benchmarks")]
 pub mod benchmark_helpers {
@@ -75,6 +75,7 @@ parameter_types! {
 	pub storage DeliveryFee: Asset = (Location::parent(), 80_000_000_000u128).into();
 	pub BridgeHubLocation: Location = Location::new(1,[Parachain(westend_runtime_constants::system_parachain::BRIDGE_HUB_ID)]);
 	pub SystemFrontendPalletLocation: InteriorLocation = [PalletInstance(80)].into();
+	pub const RootLocation: Location = Location::here();
 }
 
 impl snowbridge_pallet_system_frontend::Config for Runtime {
@@ -82,14 +83,15 @@ impl snowbridge_pallet_system_frontend::Config for Runtime {
 	type WeightInfo = ();
 	#[cfg(feature = "runtime-benchmarks")]
 	type Helper = ();
-	type CreateAgentOrigin =
-		EitherOf<EnsureXcm<Everything>, EnsureXcmOrigin<RuntimeOrigin, LocalOriginToLocation>>;
-	type RegisterTokenOrigin = ForeignTokenCreator<
-		(
-			FromSiblingParachain<parachain_info::Pallet<Runtime>, Location>,
-			xcm_config::bridging::to_rococo::RococoAssetFromAssetHubRococo,
-		),
-		Location,
+	type RegisterTokenOrigin = EitherOf<
+		ForeignTokenCreator<
+			(
+				FromSiblingParachain<parachain_info::Pallet<Runtime>, Location>,
+				xcm_config::bridging::to_rococo::RococoAssetFromAssetHubRococo,
+			),
+			Location,
+		>,
+		EnsureRootWithSuccess<crate::AccountId, RootLocation>,
 	>;
 	#[cfg(not(feature = "runtime-benchmarks"))]
 	type XcmSender = XcmRouter;
@@ -101,6 +103,7 @@ impl snowbridge_pallet_system_frontend::Config for Runtime {
 	type BridgeHubLocation = BridgeHubLocation;
 	type UniversalLocation = UniversalLocation;
 	type PalletLocation = SystemFrontendPalletLocation;
+	type BackendWeightInfo = ();
 }
 
 /// `EnsureOriginWithArg` impl for `ForeignTokenCreator` that allows only XCM origins that are

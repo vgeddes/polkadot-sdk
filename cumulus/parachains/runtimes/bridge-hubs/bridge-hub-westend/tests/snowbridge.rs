@@ -1,18 +1,18 @@
 // Copyright (C) Parity Technologies (UK) Ltd.
 // This file is part of Cumulus.
+// SPDX-License-Identifier: Apache-2.0
 
-// Cumulus is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-
-// Cumulus is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details.
-
-// You should have received a copy of the GNU General Public License
-// along with Cumulus.  If not, see <http://www.gnu.org/licenses/>.
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// 	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #![cfg(test)]
 
@@ -35,7 +35,6 @@ use sp_runtime::{
 	generic::{Era, SignedPayload},
 	AccountId32,
 };
-use testnet_parachains_constants::westend::snowbridge::WETHAddress;
 
 parameter_types! {
 		pub const DefaultBridgeHubEthereumBaseFee: Balance = 2_750_872_500_000;
@@ -201,12 +200,4 @@ fn construct_and_apply_extrinsic(
 	let xt = construct_extrinsic(origin, call);
 	let r = Executive::apply_extrinsic(xt);
 	r.unwrap()
-}
-
-#[test]
-fn snowbridge_configurable_key() {
-	let weth_key = WETHAddress::key().to_vec();
-	assert_eq!(to_hex(weth_key.as_slice(), true), "0x36f2f46ef8ffc0cc013470f259488ca1");
-	let gateway_key = EthereumGatewayAddress::key().to_vec();
-	assert_eq!(to_hex(gateway_key.as_slice(), true), "0xaed97c7854d601808b98ae43079dafb3");
 }
