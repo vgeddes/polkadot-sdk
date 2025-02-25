@@ -3,7 +3,7 @@
 
 extern crate alloc;
 
-use crate::reward::RewardPaymentError::{ChargeFeesFailure, XcmDeliveryFailure, XcmSendFailure};
+use crate::reward::RewardPaymentError::{ChargeFeesFailure, XcmSendFailure};
 use bp_relayers::PaymentProcedure;
 use frame_support::dispatch::GetDispatchInfo;
 use scale_info::TypeInfo;
@@ -397,7 +397,7 @@ mod tests {
 		assert!(result.is_err());
 		let err_str = format!("{:?}", result.err().unwrap());
 		assert!(
-			err_str.contains("xcm delivery failure"),
+			err_str.contains("xcm send failure"),
 			"Expected 'xcm delivery failure', got {:?}",
 			err_str
 		);
