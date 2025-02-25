@@ -31,4 +31,3 @@ xcm = { workspace = true }
 
 # Bridges
 bp-bridge-hub-rococo = { workspace = true }
-snowbridge-inbound-queue-primitives = { workspace = true, default-features = true }

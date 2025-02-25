@@ -395,6 +395,9 @@ mod tests {
 		pub UniversalLocation: InteriorLocation =
 			[GlobalConsensus(ByGenesis(WESTEND_GENESIS_HASH)), Parachain(1002)].into();
 		pub AssetHubFromEthereum: Location = Location::new(1,[GlobalConsensus(ByGenesis(WESTEND_GENESIS_HASH)),Parachain(1000)]);
+		pub const CreateAssetCall: [u8;2] = [53, 0];
+		pub const SetAssetMetadataCall: [u8;2] = [53, 17];
+		pub const CreateAssetDeposit: u128 = 10_000_000_000u128;
 	}
 
 	pub struct MockTokenIdConvert;
@@ -418,6 +421,9 @@ mod tests {
 	}
 
 	type Converter = MessageToXcm<
+		CreateAssetCall,
+		SetAssetMetadataCall,
+		CreateAssetDeposit,
 		EthereumNetwork,
 		InboundQueueLocation,
 		MockTokenIdConvert,
@@ -427,6 +433,9 @@ mod tests {
 	>;
 
 	type ConverterFailing = MessageToXcm<
+		CreateAssetCall,
+		SetAssetMetadataCall,
+		CreateAssetDeposit,
 		EthereumNetwork,
 		InboundQueueLocation,
 		MockFailedTokenConvert,
@@ -466,7 +475,7 @@ mod tests {
 			nonce: 0,
 			origin: origin.clone(),
 			assets,
-			xcm: versioned_xcm.encode(),
+			xcm: XcmPayload::Raw(versioned_xcm.encode()),
 			claimer,
 			value,
 			execution_fee,
@@ -611,7 +620,7 @@ mod tests {
 			nonce: 0,
 			origin: origin.clone(),
 			assets,
-			xcm: versioned_xcm.encode(),
+			xcm: XcmPayload::Raw(versioned_xcm.encode()),
 			claimer,
 			value,
 			execution_fee,
@@ -663,7 +672,7 @@ mod tests {
 			nonce: 0,
 			origin,
 			assets,
-			xcm: versioned_xcm.encode(),
+			xcm: XcmPayload::Raw(versioned_xcm.encode()),
 			claimer,
 			value,
 			execution_fee,
@@ -701,7 +710,7 @@ mod tests {
 			nonce: 0,
 			origin,
 			assets,
-			xcm: versioned_xcm.encode(),
+			xcm: XcmPayload::Raw(versioned_xcm.encode()),
 			claimer,
 			value,
 			execution_fee,
@@ -777,7 +786,7 @@ mod tests {
 			nonce: 0,
 			origin,
 			assets,
-			xcm: versioned_xcm,
+			xcm: XcmPayload::Raw(versioned_xcm),
 			claimer: Some(claimer.encode()),
 			value,
 			execution_fee,
