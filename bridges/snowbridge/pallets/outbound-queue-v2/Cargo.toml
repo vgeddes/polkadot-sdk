@@ -50,7 +50,7 @@ sp-keyring = { workspace = true, default-features = true }
 default = ["std"]
 std = [
 	"alloy-core/std",
-    "bp-relayers/std",
+	"bp-relayers/std",
 	"bridge-hub-common/std",
 	"codec/std",
 	"ethabi/std",

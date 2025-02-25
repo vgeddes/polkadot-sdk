@@ -54,7 +54,7 @@ sp-keyring = { workspace = true, default-features = true }
 default = ["std"]
 std = [
 	"alloy-core/std",
-    "bp-relayers/std",
+	"bp-relayers/std",
 	"codec/std",
 	"frame-benchmarking/std",
 	"frame-support/std",
