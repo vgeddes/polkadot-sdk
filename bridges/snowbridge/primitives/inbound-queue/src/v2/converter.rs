@@ -49,7 +49,6 @@ pub enum AssetTransfer {
 /// Concrete implementation of `ConvertMessage`
 pub struct MessageToXcm<
 	CreateAssetCall,
-	SetAssetMetadataCall,
 	CreateAssetDeposit,
 	EthereumNetwork,
 	InboundQueueLocation,
@@ -60,7 +59,6 @@ pub struct MessageToXcm<
 > {
 	_phantom: PhantomData<(
 		CreateAssetCall,
-		SetAssetMetadataCall,
 		CreateAssetDeposit,
 		EthereumNetwork,
 		InboundQueueLocation,
@@ -73,7 +71,6 @@ pub struct MessageToXcm<
 
 impl<
 		CreateAssetCall,
-		SetAssetMetadataCall,
 		CreateAssetDeposit,
 		EthereumNetwork,
 		InboundQueueLocation,
@@ -84,7 +81,6 @@ impl<
 	>
 	MessageToXcm<
 		CreateAssetCall,
-		SetAssetMetadataCall,
 		CreateAssetDeposit,
 		EthereumNetwork,
 		InboundQueueLocation,
@@ -95,7 +91,6 @@ impl<
 	>
 where
 	CreateAssetCall: Get<CallIndex>,
-	SetAssetMetadataCall: Get<CallIndex>,
 	CreateAssetDeposit: Get<u128>,
 	EthereumNetwork: Get<NetworkId>,
 	InboundQueueLocation: Get<InteriorLocation>,
@@ -111,13 +106,12 @@ where
 
 		let remote_xcm: Xcm<()> = match &message.xcm {
 			XcmPayload::Raw(raw) => decode_raw_xcm(raw),
-			XcmPayload::CreateAsset { token, network, name, symbol, decimals } =>
+			XcmPayload::CreateAsset { token, network, } =>
 				create_asset_xcm::<
 					CreateAssetCall,
-					SetAssetMetadataCall,
 					CreateAssetDeposit,
 					EthereumNetwork,
-				>(token, *network, name.clone(), symbol.clone(), *decimals, message.value)?,
+				>(token, *network, message.value)?,
 		};
 
 		// Asset to cover XCM execution fee
@@ -195,17 +189,13 @@ fn decode_raw_xcm(raw: &[u8]) -> Xcm<()> {
 
 /// Construct the `Xcm<()>` needed to create a new asset on Polkadot.
 /// Returns an error if the source network is not Ethereum and the target network is not Polkadot.
-fn create_asset_xcm<CreateAssetCall, SetAssetMetadataCall, CreateAssetDeposit, EthereumNetwork>(
+fn create_asset_xcm<CreateAssetCall, CreateAssetDeposit, EthereumNetwork>(
 	token: &H160,
 	network: u8,
-	name: Vec<u8>,
-	symbol: Vec<u8>,
-	decimals: u8,
 	eth_value: u128,
 ) -> Result<Xcm<()>, ConvertMessageError>
 where
 	CreateAssetCall: Get<CallIndex>,
-	SetAssetMetadataCall: Get<CallIndex>,
 	CreateAssetDeposit: Get<u128>,
 	EthereumNetwork: Get<NetworkId>,
 {
@@ -222,7 +212,6 @@ where
 		(Location::new(2, [GlobalConsensus(EthereumNetwork::get())]), eth_value).into();
 
 	let create_call_index: [u8; 2] = CreateAssetCall::get();
-	let set_metadata_call_index: [u8; 2] = SetAssetMetadataCall::get();
 
 	let asset_id = Location::new(
 		2,
@@ -257,14 +246,6 @@ where
 						.encode()
 						.into(),
 				},
-				// Set the metadata.
-				Transact {
-					origin_kind: OriginKind::SovereignAccount,
-					fallback_max_weight: None,
-					call: (set_metadata_call_index, asset_id, name, symbol, decimals)
-						.encode()
-						.into(),
-				},
 			]
 			.into())
 		},
@@ -274,7 +255,6 @@ where
 
 impl<
 		CreateAssetCall,
-		SetAssetMetadataCall,
 		CreateAssetDeposit,
 		EthereumNetwork,
 		InboundQueueLocation,
@@ -285,7 +265,6 @@ impl<
 	> ConvertMessage
 	for MessageToXcm<
 		CreateAssetCall,
-		SetAssetMetadataCall,
 		CreateAssetDeposit,
 		EthereumNetwork,
 		InboundQueueLocation,
@@ -296,7 +275,6 @@ impl<
 	>
 where
 	CreateAssetCall: Get<CallIndex>,
-	SetAssetMetadataCall: Get<CallIndex>,
 	CreateAssetDeposit: Get<u128>,
 	EthereumNetwork: Get<NetworkId>,
 	InboundQueueLocation: Get<InteriorLocation>,
@@ -396,7 +374,6 @@ mod tests {
 			[GlobalConsensus(ByGenesis(WESTEND_GENESIS_HASH)), Parachain(1002)].into();
 		pub AssetHubFromEthereum: Location = Location::new(1,[GlobalConsensus(ByGenesis(WESTEND_GENESIS_HASH)),Parachain(1000)]);
 		pub const CreateAssetCall: [u8;2] = [53, 0];
-		pub const SetAssetMetadataCall: [u8;2] = [53, 17];
 		pub const CreateAssetDeposit: u128 = 10_000_000_000u128;
 	}
 
@@ -422,7 +399,6 @@ mod tests {
 
 	type Converter = MessageToXcm<
 		CreateAssetCall,
-		SetAssetMetadataCall,
 		CreateAssetDeposit,
 		EthereumNetwork,
 		InboundQueueLocation,
@@ -434,7 +410,6 @@ mod tests {
 
 	type ConverterFailing = MessageToXcm<
 		CreateAssetCall,
-		SetAssetMetadataCall,
 		CreateAssetDeposit,
 		EthereumNetwork,
 		InboundQueueLocation,

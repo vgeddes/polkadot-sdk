@@ -34,9 +34,6 @@ sol! {
 		struct XcmCreateAsset {
 			address token;
 			uint8 network;
-			bytes name;
-			bytes symbol;
-			uint8 decimals;
 		}
 		struct Payload {
 			address origin;
@@ -88,7 +85,7 @@ pub enum XcmPayload {
 	/// Represents raw XCM bytes
 	Raw(Vec<u8>),
 	/// A token registration template
-	CreateAsset { token: H160, network: u8, name: Vec<u8>, symbol: Vec<u8>, decimals: u8 },
+	CreateAsset { token: H160, network: u8, },
 }
 
 /// The ethereum side sends messages which are transcoded into XCM on BH. These messages are
@@ -204,7 +201,7 @@ impl TryFrom<&Log> for Message {
 					.map_err(|decode_err| {
 						log::debug!(
 							target: LOG_TARGET,
-							"decode token registration error: {:?}",
+							"decode create asset error: {:?}",
 							decode_err
 						);
 						MessageDecodeError
@@ -212,9 +209,6 @@ impl TryFrom<&Log> for Message {
 				XcmPayload::CreateAsset {
 					token: H160::from(create_asset.token.as_ref()),
 					network: create_asset.network,
-					name: create_asset.name.to_vec(),
-					symbol: create_asset.symbol.to_vec(),
-					decimals: create_asset.decimals,
 				}
 			},
 			_ => return Err(MessageDecodeError),

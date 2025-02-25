@@ -176,7 +176,6 @@ parameter_types! {
 	pub AssetHubFromEthereum: Location = Location::new(1,[GlobalConsensus(ByGenesis(WESTEND_GENESIS_HASH)),Parachain(1000)]);
 	pub const InitialFund: u128 = 1_000_000_000_000;
 	pub const CreateAssetCall: [u8;2] = [53, 0];
-	pub const SetAssetMetadataCall: [u8;2] = [53, 17];
 	pub const CreateAssetDeposit: u128 = 10_000_000_000u128;
 }
 
@@ -191,7 +190,6 @@ impl inbound_queue_v2::Config for Test {
 	type AssetHubParaId = ConstU32<1000>;
 	type MessageConverter = MessageToXcm<
 		CreateAssetCall,
-		SetAssetMetadataCall,
 		CreateAssetDeposit,
 		EthereumNetwork,
 		InboundQueueLocation,
@@ -335,7 +333,6 @@ pub mod mock_xcm_send_failure {
 		type AssetHubParaId = ConstU32<1000>;
 		type MessageConverter = MessageToXcm<
 			CreateAssetCall,
-			SetAssetMetadataCall,
 			CreateAssetDeposit,
 			EthereumNetwork,
 			InboundQueueLocation,
@@ -431,7 +428,6 @@ pub mod mock_xcm_validate_failure {
 		type AssetHubParaId = ConstU32<1000>;
 		type MessageConverter = MessageToXcm<
 			CreateAssetCall,
-			SetAssetMetadataCall,
 			CreateAssetDeposit,
 			EthereumNetwork,
 			InboundQueueLocation,
@@ -519,7 +515,6 @@ pub mod mock_charge_fees_failure {
 		type AssetHubParaId = ConstU32<1000>;
 		type MessageConverter = MessageToXcm<
 			CreateAssetCall,
-			SetAssetMetadataCall,
 			CreateAssetDeposit,
 			EthereumNetwork,
 			InboundQueueLocation,

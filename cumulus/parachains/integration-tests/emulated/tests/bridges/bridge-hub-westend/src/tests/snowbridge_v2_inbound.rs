@@ -64,10 +64,6 @@ fn register_token_v2() {
 
 	let token: H160 = TOKEN_ID.into();
 
-	let token_name = b"Kilt".to_vec();
-	let token_symbol = b"KILT".to_vec();
-	let token_decimals = 12u8;
-
 	BridgeHubWestend::execute_with(|| {
 		type RuntimeEvent = <BridgeHubWestend as Chain>::RuntimeEvent;
 		let origin = EthereumGatewayAddress::get();
@@ -80,9 +76,6 @@ fn register_token_v2() {
 			xcm: XcmPayload::CreateAsset {
 				token,
 				network: 0,
-				name: token_name.clone(),
-				symbol: token_symbol.clone(),
-				decimals: token_decimals,
 			},
 			claimer: Some(claimer_bytes),
 			// Used to pay the asset creation deposit.
@@ -113,14 +106,6 @@ fn register_token_v2() {
 				RuntimeEvent::ForeignAssets(pallet_assets::Event::Created { asset_id, owner, .. }) => {
 					asset_id: *asset_id == erc20_token_location(token),
 					owner: *owner == snowbridge_sovereign(),
-				},
-				// Check that the token metadata was updated.
-				RuntimeEvent::ForeignAssets(pallet_assets::Event::MetadataSet { asset_id, name, symbol, decimals, is_frozen }) => {
-					asset_id: *asset_id == erc20_token_location(token),
-					name: *name == token_name,
-					symbol: *symbol == token_symbol,
-					decimals: *decimals == token_decimals,
-					is_frozen: *is_frozen == false,
 				},
 				// Check that excess fees were paid to the claimer
 				RuntimeEvent::ForeignAssets(pallet_assets::Event::Issued { asset_id, owner, .. }) => {
