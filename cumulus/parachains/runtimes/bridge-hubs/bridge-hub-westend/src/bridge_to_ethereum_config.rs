@@ -76,6 +76,7 @@ parameter_types! {
 
 parameter_types! {
 	pub const CreateAssetCall: [u8;2] = [53, 0];
+	pub const SetAssetMetadataCall: [u8;2] = [53, 17];
 	pub const CreateAssetDeposit: u128 = (UNITS / 10) + EXISTENTIAL_DEPOSIT;
 	pub Parameters: PricingParameters<u128> = PricingParameters {
 		exchange_rate: FixedU128::from_rational(1, 400),
@@ -140,6 +141,7 @@ impl snowbridge_pallet_inbound_queue_v2::Config for Runtime {
 	type WeightToFee = WeightToFee;
 	type MessageConverter = snowbridge_inbound_queue_primitives::v2::MessageToXcm<
 		CreateAssetCall,
+		SetAssetMetadataCall,
 		CreateAssetDeposit,
 		EthereumNetwork,
 		InboundQueueLocation,

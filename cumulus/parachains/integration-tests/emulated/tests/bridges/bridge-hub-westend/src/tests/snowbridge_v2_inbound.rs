@@ -19,7 +19,6 @@ use crate::{
 		set_up_eth_and_dot_pool_on_penpal, snowbridge_sovereign, weth_location,
 	},
 };
-use crate::tests::snowbridge_common::set_up_eth_and_dot_pool_on_rococo;
 use asset_hub_westend_runtime::ForeignAssets;
 use bridge_hub_westend_runtime::{
 	bridge_to_ethereum_config::{CreateAssetCall, CreateAssetDeposit, EthereumGatewayAddress},
@@ -33,7 +32,7 @@ use snowbridge_core::{AssetMetadata, TokenIdOf};
 use snowbridge_inbound_queue_primitives::{
 	v2::{
 		EthereumAsset::{ForeignTokenERC20, NativeTokenERC20},
-		Message,
+		Message, XcmPayload,
 	},
 	EthereumLocationsConverterFor,
 };
@@ -41,7 +40,6 @@ use sp_core::{H160, H256};
 use sp_runtime::MultiAddress;
 use xcm::opaque::latest::AssetTransferFilter::ReserveDeposit;
 use xcm_executor::traits::ConvertLocation;
-use snowbridge_inbound_queue_primitives::v2::XcmCommand;
 
 const TOKEN_AMOUNT: u128 = 100_000_000_000;
 
@@ -64,16 +62,11 @@ fn register_token_v2() {
 	let claimer = Location::new(0, AccountId32 { network: None, id: receiver.clone().into() });
 	let claimer_bytes = claimer.encode();
 
-	let bridge_owner = EthereumLocationsConverterFor::<[u8; 32]>::from_chain_id(&CHAIN_ID);
-
 	let token: H160 = TOKEN_ID.into();
-	let asset_id = erc20_token_location(token.into());
 
-	let dot_asset = Location::new(1, Here);
-	let dot_fee: xcm::prelude::Asset = (dot_asset, CreateAssetDeposit::get()).into();
-
-	let eth_asset_value = 9_000_000_000_000u128;
-	let asset_deposit: xcm::prelude::Asset = (eth_location(), eth_asset_value).into();
+	let token_name = b"Kilt".to_vec();
+	let token_symbol = b"KILT".to_vec();
+	let token_decimals = 12u8;
 
 	BridgeHubWestend::execute_with(|| {
 		type RuntimeEvent = <BridgeHubWestend as Chain>::RuntimeEvent;
@@ -84,7 +77,13 @@ fn register_token_v2() {
 			nonce: 1,
 			origin,
 			assets: vec![],
-			xcm: XcmCommand::TokenRegistration { token, network: 0 },
+			xcm: XcmPayload::CreateAsset {
+				token,
+				network: 0,
+				name: token_name.clone(),
+				symbol: token_symbol.clone(),
+				decimals: token_decimals,
+			},
 			claimer: Some(claimer_bytes),
 			// Used to pay the asset creation deposit.
 			value: 9_000_000_000_000u128,
@@ -115,88 +114,13 @@ fn register_token_v2() {
 					asset_id: *asset_id == erc20_token_location(token),
 					owner: *owner == snowbridge_sovereign(),
 				},
-				// Check that excess fees were paid to the claimer
-				RuntimeEvent::ForeignAssets(pallet_assets::Event::Issued { asset_id, owner, .. }) => {
-					asset_id: *asset_id == eth_location(),
-					owner: *owner == receiver.clone().into(),
-				},
-			]
-		);
-
-		let events = AssetHubWestend::events();
-		// Check that no assets were trapped
-		assert!(
-			!events.iter().any(|event| matches!(
-				event,
-				RuntimeEvent::PolkadotXcm(pallet_xcm::Event::AssetsTrapped { .. })
-			)),
-			"Assets were trapped, should not happen."
-		);
-	});
-}
-
-#[test]
-fn register_token_on_rococo_v2() {
-	let relayer = BridgeHubWestendSender::get();
-	let receiver = AssetHubWestendReceiver::get();
-	BridgeHubWestend::fund_accounts(vec![(relayer.clone(), INITIAL_FUND)]);
-	AssetHubWestend::fund_accounts(vec![(snowbridge_sovereign(), INITIAL_FUND)]);
-
-	set_up_eth_and_dot_pool_on_rococo();
-
-	let claimer = Location::new(0, AccountId32 { network: None, id: receiver.clone().into() });
-	let claimer_bytes = claimer.encode();
-
-	let bridge_owner = EthereumLocationsConverterFor::<[u8; 32]>::from_chain_id(&CHAIN_ID);
-
-	let token: H160 = TOKEN_ID.into();
-	let asset_id = erc20_token_location(token.into());
-
-	let dot_asset = Location::new(1, Here);
-	let dot_fee: xcm::prelude::Asset = (dot_asset, CreateAssetDeposit::get()).into();
-
-	let eth_asset_value = 9_000_000_000_000u128;
-	let asset_deposit: xcm::prelude::Asset = (eth_location(), eth_asset_value).into();
-
-	BridgeHubWestend::execute_with(|| {
-		type RuntimeEvent = <BridgeHubWestend as Chain>::RuntimeEvent;
-		let origin = EthereumGatewayAddress::get();
-
-		let message = Message {
-			gateway: origin,
-			nonce: 1,
-			origin,
-			assets: vec![],
-			xcm: XcmCommand::TokenRegistration { token, network: 1 },
-			claimer: Some(claimer_bytes),
-			// Used to pay the asset creation deposit.
-			value: 9_000_000_000_000u128,
-			execution_fee: 1_500_000_000_000u128,
-			relayer_fee: 1_500_000_000_000u128,
-		};
-
-		EthereumInboundQueueV2::process_message(relayer, message).unwrap();
-
-		assert_expected_events!(
-			BridgeHubWestend,
-			vec![RuntimeEvent::XcmpQueue(cumulus_pallet_xcmp_queue::Event::XcmpMessageSent { .. }) => {},]
-		);
-	});
-
-	AssetHubWestend::execute_with(|| {
-		type RuntimeEvent = <AssetHubWestend as Chain>::RuntimeEvent;
-
-		assert_expected_events!(
-			AssetHubWestend,
-			vec![
-				// message processed successfully
-				RuntimeEvent::MessageQueue(
-					pallet_message_queue::Event::Processed { success: true, .. }
-				) => {},
-				// Check that the token was created as a foreign asset on AssetHub
-				RuntimeEvent::ForeignAssets(pallet_assets::Event::Created { asset_id, owner, .. }) => {
+				// Check that the token metadata was updated.
+				RuntimeEvent::ForeignAssets(pallet_assets::Event::MetadataSet { asset_id, name, symbol, decimals, is_frozen }) => {
 					asset_id: *asset_id == erc20_token_location(token),
-					owner: *owner == snowbridge_sovereign(),
+					name: *name == token_name,
+					symbol: *symbol == token_symbol,
+					decimals: *decimals == token_decimals,
+					is_frozen: *is_frozen == false,
 				},
 				// Check that excess fees were paid to the claimer
 				RuntimeEvent::ForeignAssets(pallet_assets::Event::Issued { asset_id, owner, .. }) => {
@@ -261,7 +185,7 @@ fn send_token_v2() {
 			nonce: 1,
 			origin,
 			assets,
-			xcm: XcmCommand::Raw(versioned_message_xcm.encode()),
+			xcm: XcmPayload::Raw(versioned_message_xcm.encode()),
 			claimer: Some(claimer_bytes),
 			value: 1_500_000_000_000u128,
 			execution_fee: 1_500_000_000_000u128,
@@ -358,7 +282,7 @@ fn send_weth_v2() {
 			nonce: 1,
 			origin,
 			assets,
-			xcm: XcmCommand::Raw(versioned_message_xcm.encode()),
+			xcm: XcmPayload::Raw(versioned_message_xcm.encode()),
 			claimer: Some(claimer_bytes),
 			value: 3_500_000_000_000u128,
 			execution_fee: 1_500_000_000_000u128,
@@ -508,7 +432,7 @@ fn register_and_send_multiple_tokens_v2() {
 			nonce: 1,
 			origin,
 			assets,
-			xcm: XcmCommand::Raw(versioned_message_xcm.encode()),
+			xcm: XcmPayload::Raw(versioned_message_xcm.encode()),
 			claimer: Some(claimer_bytes),
 			value: 3_500_000_000_000u128,
 			execution_fee: 1_500_000_000_000u128,
@@ -684,7 +608,7 @@ fn send_token_to_penpal_v2() {
 			nonce: 1,
 			origin,
 			assets,
-			xcm: XcmCommand::Raw(versioned_message_xcm.encode()),
+			xcm: XcmPayload::Raw(versioned_message_xcm.encode()),
 			claimer: Some(claimer_bytes),
 			value: 3_500_000_000_000u128,
 			execution_fee: 1_500_000_000_000u128,
@@ -852,7 +776,7 @@ fn send_foreign_erc20_token_back_to_polkadot() {
 			nonce: 1,
 			origin,
 			assets,
-			xcm: XcmCommand::Raw(versioned_message_xcm.encode()),
+			xcm: XcmPayload::Raw(versioned_message_xcm.encode()),
 			claimer: Some(claimer_bytes),
 			value: 1_500_000_000_000u128,
 			execution_fee: 3_500_000_000_000u128,
@@ -939,7 +863,7 @@ fn invalid_xcm_traps_funds_on_ah() {
 			nonce: 1,
 			origin,
 			assets,
-			xcm: XcmCommand::Raw(instructions.to_vec()),
+			xcm: XcmPayload::Raw(instructions.to_vec()),
 			claimer: Some(claimer_bytes),
 			value: 1_500_000_000_000u128,
 			execution_fee: 1_500_000_000_000u128,
@@ -998,7 +922,7 @@ fn invalid_claimer_does_not_fail_the_message() {
 			nonce: 1,
 			origin,
 			assets,
-			xcm: XcmCommand::Raw(versioned_message_xcm.encode()),
+			xcm: XcmPayload::Raw(versioned_message_xcm.encode()),
 			// Set an invalid claimer
 			claimer: Some(hex!("2b7ce7bc7e87e4d6619da21487c7a53f").to_vec()),
 			value: 1_500_000_000_000u128,

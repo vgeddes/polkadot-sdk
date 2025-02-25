@@ -49,6 +49,7 @@ pub enum AssetTransfer {
 /// Concrete implementation of `ConvertMessage`
 pub struct MessageToXcm<
 	CreateAssetCall,
+	SetAssetMetadataCall,
 	CreateAssetDeposit,
 	EthereumNetwork,
 	InboundQueueLocation,
@@ -59,6 +60,7 @@ pub struct MessageToXcm<
 > {
 	_phantom: PhantomData<(
 		CreateAssetCall,
+		SetAssetMetadataCall,
 		CreateAssetDeposit,
 		EthereumNetwork,
 		InboundQueueLocation,
@@ -71,6 +73,7 @@ pub struct MessageToXcm<
 
 impl<
 		CreateAssetCall,
+		SetAssetMetadataCall,
 		CreateAssetDeposit,
 		EthereumNetwork,
 		InboundQueueLocation,
@@ -81,6 +84,7 @@ impl<
 	>
 	MessageToXcm<
 		CreateAssetCall,
+		SetAssetMetadataCall,
 		CreateAssetDeposit,
 		EthereumNetwork,
 		InboundQueueLocation,
@@ -91,6 +95,7 @@ impl<
 	>
 where
 	CreateAssetCall: Get<CallIndex>,
+	SetAssetMetadataCall: Get<CallIndex>,
 	CreateAssetDeposit: Get<u128>,
 	EthereumNetwork: Get<NetworkId>,
 	InboundQueueLocation: Get<InteriorLocation>,
@@ -99,181 +104,177 @@ where
 	EthereumUniversalLocation: Get<InteriorLocation>,
 	GlobalAssetHubLocation: Get<Location>,
 {
-		/// Parse the message into an intermediate form, with all fields decoded
-		/// and prepared.
-		fn prepare(message: Message) -> Result<PreparedMessage, ConvertMessageError> {
-			let mut remote_xcm: Xcm<()> = Xcm::new();
+	/// Parse the message into an intermediate form, with all fields decoded
+	/// and prepared.
+	fn prepare(message: Message) -> Result<PreparedMessage, ConvertMessageError> {
+		let ether_location = Location::new(2, [GlobalConsensus(EthereumNetwork::get())]);
 
-			let ether_location = Location::new(2, [GlobalConsensus(EthereumNetwork::get())]);
+		let remote_xcm: Xcm<()> = match &message.xcm {
+			XcmPayload::Raw(raw) => decode_raw_xcm(raw),
+			XcmPayload::CreateAsset { token, network, name, symbol, decimals } =>
+				create_asset_xcm::<
+					CreateAssetCall,
+					SetAssetMetadataCall,
+					CreateAssetDeposit,
+					EthereumNetwork,
+				>(token, *network, name.clone(), symbol.clone(), *decimals, message.value)?,
+		};
 
-			match &message.xcm {
-				XcmCommand::Raw(raw) => {
-					// Allow xcm decode failure so that assets can be trapped on AH instead of this
-					// message failing but funds are already locked on Ethereum.
-					if let Ok(versioned_xcm) = VersionedXcm::<()>::decode_with_depth_limit(
-						MAX_XCM_DECODE_DEPTH,
-						&mut raw.as_ref(),
-					) {
-						if let Ok(decoded_xcm) = versioned_xcm.try_into() {
-							remote_xcm = decoded_xcm;
-						}
-					}
-				},
-				XcmCommand::TokenRegistration { token, network } => {
-					let chain_id = match EthereumNetwork::get() {
-						Ethereum { chain_id } => chain_id,
-						_ => return Err(ConvertMessageError::InvalidNetwork),
-					};
-					let bridge_owner =
-						EthereumLocationsConverterFor::<[u8; 32]>::from_chain_id(&chain_id);
-					let dot_asset = Location::new(1, Here);
-					let dot_fee: xcm::prelude::Asset = (dot_asset, CreateAssetDeposit::get()).into();
+		// Asset to cover XCM execution fee
+		let execution_fee_asset: Asset = (ether_location.clone(), message.execution_fee).into();
 
-					let asset_deposit: xcm::prelude::Asset =
-						(ether_location.clone(), message.value).into();
+		let mut assets = vec![];
 
-					let create_call_index: [u8; 2] = CreateAssetCall::get();
-					let asset_id = Location::new(
-						2,
-						[GlobalConsensus(EthereumNetwork::get()), AccountKey20 { network: None, key: (*token).into() }],
-					);
+		let claimer: Option<Location> = match message.claimer {
+			Some(claimer_bytes) => Location::decode(&mut claimer_bytes.as_ref()).ok(),
+			None => None,
+		};
 
-					match *network {
-						// Polkadot
-						0 => {
-							let instructions = vec![
-								// Exchange eth for dot to pay the asset creation deposit
-								ExchangeAsset {
-									give: asset_deposit.clone().into(),
-									want: dot_fee.clone().into(),
-									maximal: false,
-								},
-								// Deposit the dot deposit into the bridge sovereign account (where the asset
-								// creation fee will be deducted from)
-								DepositAsset { assets: dot_fee.into(), beneficiary: bridge_owner.into() },
-								// Call to create the asset.
-								Transact {
-									origin_kind: OriginKind::Xcm,
-									fallback_max_weight: None,
-									call: (
-										create_call_index,
-										asset_id,
-										MultiAddress::<[u8; 32], ()>::Id(bridge_owner.into()),
-										MINIMUM_DEPOSIT,
-									)
-										.encode()
-										.into(),
-								},
-								ExpectTransactStatus(MaybeErrorCode::Success),
-							];
-							remote_xcm = instructions.into();
-						},
-						// Kusama
-						1 => {
-							let dest = Location::new(2,
-							[
-								GlobalConsensus(ByGenesis(xcm::latest::ROCOCO_GENESIS_HASH)),
-								Parachain(1000u32),
-							]);
-							let instructions = vec![DepositReserveAsset {
-								assets: Wild(AllCounted(2)),
-								dest,
-								xcm: vec![
-									ExchangeAsset {
-										give: asset_deposit.clone().into(),
-										want: dot_fee.clone().into(),
-										maximal: false,
-									},
-									// Deposit the dot deposit into the bridge sovereign account (where the asset
-									// creation fee will be deducted from)
-									DepositAsset { assets: dot_fee.into(), beneficiary: bridge_owner.into() },
-									// Call to create the asset.
-									Transact {
-										origin_kind: OriginKind::Xcm,
-										fallback_max_weight: None,
-										call: (
-											create_call_index,
-											asset_id,
-											MultiAddress::<[u8; 32], ()>::Id(bridge_owner.into()),
-											MINIMUM_DEPOSIT,
-										)
-											.encode()
-											.into(),
-									},
-									ExpectTransactStatus(MaybeErrorCode::Success),
-								]
-									.into(),
-							},
-							];
-							remote_xcm = instructions.into();
-						}
-						_ => ()
-					}
-				},
-			}
-
-			// Asset to cover XCM execution fee
-			let execution_fee_asset: Asset = (ether_location.clone(), message.execution_fee).into();
-
-			let mut assets = vec![];
-
-			let claimer: Option<Location> = match message.claimer {
-				Some(claimer_bytes) => Location::decode(&mut claimer_bytes.as_ref()).ok(),
-				None => None
-			};
-
-			if message.value > 0 {
-				// Asset for remaining ether
-				let remaining_ether_asset: Asset = (
-					ether_location.clone(),
-					message.value
-				).into();
-				assets.push(AssetTransfer::ReserveDeposit(remaining_ether_asset));
-			}
-
-			for asset in &message.assets {
-				match asset {
-					EthereumAsset::NativeTokenERC20 { token_id, value } => {
-						let token_location: Location = Location::new(
-							2,
-							[
-								GlobalConsensus(EthereumNetwork::get()),
-								AccountKey20 { network: None, key: (*token_id).into() },
-							],
-						);
-						let asset: Asset = (token_location, *value).into();
-						assets.push(AssetTransfer::ReserveDeposit(asset));
-					},
-					EthereumAsset::ForeignTokenERC20 { token_id, value } => {
-						let asset_loc = ConvertAssetId::convert(&token_id)
-							.ok_or(ConvertMessageError::InvalidAsset)?;
-						let mut reanchored_asset_loc = asset_loc.clone();
-						reanchored_asset_loc
-							.reanchor(&GlobalAssetHubLocation::get(), &EthereumUniversalLocation::get())
-							.map_err(|_| ConvertMessageError::CannotReanchor)?;
-						let asset: Asset = (reanchored_asset_loc, *value).into();
-						assets.push(AssetTransfer::ReserveWithdraw(asset));
-					},
-				}
-			}
-
-			let topic = blake2_256(&("SnowbridgeInboundQueueV2", message.nonce).encode());
-
-			let prepared_message = PreparedMessage {
-				origin: message.origin.clone(),
-				claimer,
-				assets,
-				remote_xcm,
-				execution_fee: execution_fee_asset,
-				topic
-			};
-
-			Ok(prepared_message)
+		if message.value > 0 {
+			// Asset for remaining ether
+			let remaining_ether_asset: Asset = (ether_location.clone(), message.value).into();
+			assets.push(AssetTransfer::ReserveDeposit(remaining_ether_asset));
 		}
+
+		for asset in &message.assets {
+			match asset {
+				EthereumAsset::NativeTokenERC20 { token_id, value } => {
+					let token_location: Location = Location::new(
+						2,
+						[
+							GlobalConsensus(EthereumNetwork::get()),
+							AccountKey20 { network: None, key: (*token_id).into() },
+						],
+					);
+					let asset: Asset = (token_location, *value).into();
+					assets.push(AssetTransfer::ReserveDeposit(asset));
+				},
+				EthereumAsset::ForeignTokenERC20 { token_id, value } => {
+					let asset_loc = ConvertAssetId::convert(&token_id)
+						.ok_or(ConvertMessageError::InvalidAsset)?;
+					let mut reanchored_asset_loc = asset_loc.clone();
+					reanchored_asset_loc
+						.reanchor(&GlobalAssetHubLocation::get(), &EthereumUniversalLocation::get())
+						.map_err(|_| ConvertMessageError::CannotReanchor)?;
+					let asset: Asset = (reanchored_asset_loc, *value).into();
+					assets.push(AssetTransfer::ReserveWithdraw(asset));
+				},
+			}
+		}
+
+		let topic = blake2_256(&("SnowbridgeInboundQueueV2", message.nonce).encode());
+
+		let prepared_message = PreparedMessage {
+			origin: message.origin.clone(),
+			claimer,
+			assets,
+			remote_xcm,
+			execution_fee: execution_fee_asset,
+			topic,
+		};
+
+		Ok(prepared_message)
+	}
+}
+
+/// Parse and (non-strictly) decode `raw` XCM bytes into a `Xcm<()>`.
+/// If decoding fails, return an empty `Xcm<()>`—thus allowing the message
+/// to proceed so assets can still be trapped on AH rather than the funds being locked on Ethereum
+/// but not accessible on AH.
+fn decode_raw_xcm(raw: &[u8]) -> Xcm<()> {
+	if let Ok(versioned_xcm) =
+		VersionedXcm::<()>::decode_with_depth_limit(MAX_XCM_DECODE_DEPTH, &mut raw.as_ref())
+	{
+		if let Ok(decoded_xcm) = versioned_xcm.try_into() {
+			return decoded_xcm;
+		}
+	}
+	// Decoding failed; allow an empty XCM so the message won't fail entirely.
+	Xcm::new()
+}
+
+/// Construct the `Xcm<()>` needed to create a new asset on Polkadot.
+/// Returns an error if the source network is not Ethereum and the target network is not Polkadot.
+fn create_asset_xcm<CreateAssetCall, SetAssetMetadataCall, CreateAssetDeposit, EthereumNetwork>(
+	token: &H160,
+	network: u8,
+	name: Vec<u8>,
+	symbol: Vec<u8>,
+	decimals: u8,
+	eth_value: u128,
+) -> Result<Xcm<()>, ConvertMessageError>
+where
+	CreateAssetCall: Get<CallIndex>,
+	SetAssetMetadataCall: Get<CallIndex>,
+	CreateAssetDeposit: Get<u128>,
+	EthereumNetwork: Get<NetworkId>,
+{
+	let chain_id = match EthereumNetwork::get() {
+		NetworkId::Ethereum { chain_id } => chain_id,
+		_ => return Err(ConvertMessageError::InvalidNetwork),
+	};
+	let bridge_owner = EthereumLocationsConverterFor::<[u8; 32]>::from_chain_id(&chain_id);
+
+	let dot_asset = Location::new(1, Here);
+	let dot_fee: xcm::prelude::Asset = (dot_asset, CreateAssetDeposit::get()).into();
+
+	let eth_asset: xcm::prelude::Asset =
+		(Location::new(2, [GlobalConsensus(EthereumNetwork::get())]), eth_value).into();
+
+	let create_call_index: [u8; 2] = CreateAssetCall::get();
+	let set_metadata_call_index: [u8; 2] = SetAssetMetadataCall::get();
+
+	let asset_id = Location::new(
+		2,
+		[
+			GlobalConsensus(EthereumNetwork::get()),
+			AccountKey20 { network: None, key: (*token).into() },
+		],
+	);
+
+	match network {
+		0 => {
+			Ok(vec![
+				// Exchange eth for dot to pay the asset creation deposit.
+				ExchangeAsset {
+					give: eth_asset.clone().into(),
+					want: dot_fee.clone().into(),
+					maximal: false,
+				},
+				// Deposit the dot deposit into the bridge sovereign account (where the asset
+				// creation fee will be deducted from).
+				DepositAsset { assets: dot_fee.clone().into(), beneficiary: bridge_owner.into() },
+				// Call to create the asset.
+				Transact {
+					origin_kind: OriginKind::Xcm,
+					fallback_max_weight: None,
+					call: (
+						create_call_index,
+						asset_id.clone(),
+						MultiAddress::<[u8; 32], ()>::Id(bridge_owner.into()),
+						MINIMUM_DEPOSIT,
+					)
+						.encode()
+						.into(),
+				},
+				// Set the metadata.
+				Transact {
+					origin_kind: OriginKind::SovereignAccount,
+					fallback_max_weight: None,
+					call: (set_metadata_call_index, asset_id, name, symbol, decimals)
+						.encode()
+						.into(),
+				},
+			]
+			.into())
+		},
+		_ => Err(ConvertMessageError::InvalidNetwork),
+	}
 }
 
 impl<
 		CreateAssetCall,
+		SetAssetMetadataCall,
 		CreateAssetDeposit,
 		EthereumNetwork,
 		InboundQueueLocation,
@@ -284,6 +285,7 @@ impl<
 	> ConvertMessage
 	for MessageToXcm<
 		CreateAssetCall,
+		SetAssetMetadataCall,
 		CreateAssetDeposit,
 		EthereumNetwork,
 		InboundQueueLocation,
@@ -294,6 +296,7 @@ impl<
 	>
 where
 	CreateAssetCall: Get<CallIndex>,
+	SetAssetMetadataCall: Get<CallIndex>,
 	CreateAssetDeposit: Get<u128>,
 	EthereumNetwork: Get<NetworkId>,
 	InboundQueueLocation: Get<InteriorLocation>,
@@ -302,10 +305,7 @@ where
 	EthereumUniversalLocation: Get<InteriorLocation>,
 	GlobalAssetHubLocation: Get<Location>,
 {
-	fn convert(
-		message: Message,
-	) -> Result<Xcm<()>, ConvertMessageError> {
-
+	fn convert(message: Message) -> Result<Xcm<()>, ConvertMessageError> {
 		let message = Self::prepare(message)?;
 
 		log::trace!(target: LOG_TARGET,"prepared message: {:?}", message);
@@ -321,36 +321,31 @@ where
 
 		// Make the origin account on AH the default claimer. This account can transact
 		// on AH once it gets full EVM support.
-		let default_claimer = Location::new(0, [
-			AccountKey20 {
+		let default_claimer = Location::new(
+			0,
+			[AccountKey20 {
 				// Set network to `None` to support future Plaza EVM chainid by default.
 				network: None,
 				// Ethereum account ID
-				key: message.origin.as_fixed_bytes().clone()
-			}
-		]);
+				key: message.origin.as_fixed_bytes().clone(),
+			}],
+		);
 
 		let claimer = message.claimer.unwrap_or(default_claimer);
 
-		instructions.push(
-			SetHints {
-				hints: vec![
-					AssetClaimer { location: claimer.clone() }
-				].try_into().expect("checked statically, qed")
-			}
-		);
+		instructions.push(SetHints {
+			hints: vec![AssetClaimer { location: claimer.clone() }]
+				.try_into()
+				.expect("checked statically, qed"),
+		});
 
 		let mut reserve_deposit_assets = vec![];
 		let mut reserve_withdraw_assets = vec![];
 
-
-
 		for asset in message.assets {
 			match asset {
-				AssetTransfer::ReserveDeposit(asset) =>
-					reserve_deposit_assets.push(asset),
-				AssetTransfer::ReserveWithdraw(asset)  =>
-					reserve_withdraw_assets.push(asset),
+				AssetTransfer::ReserveDeposit(asset) => reserve_deposit_assets.push(asset),
+				AssetTransfer::ReserveWithdraw(asset) => reserve_withdraw_assets.push(asset),
 			};
 		}
 
@@ -378,7 +373,6 @@ where
 
 		Ok(instructions.into())
 	}
-
 }
 
 #[cfg(test)]
@@ -460,7 +454,8 @@ mod tests {
 		];
 		let xcm: Xcm<()> = instructions.into();
 		let versioned_xcm = VersionedXcm::V5(xcm);
-		let claimer_location = Location::new(0, AccountId32 { network: None, id: H256::random().into() });
+		let claimer_location =
+			Location::new(0, AccountId32 { network: None, id: H256::random().into() });
 		let claimer: Option<Vec<u8>> = Some(claimer_location.clone().encode());
 		let value = 6_000_000_000_000u128;
 		let execution_fee = 1_000_000_000_000u128;
@@ -533,10 +528,8 @@ mod tests {
 					);
 					let token: Asset = (token_asset, token_value).into();
 
-					let remaining_ether_asset: Asset = (
-						Location::new(2, [GlobalConsensus(EthereumNetwork::get())]),
-						value
-					).into();
+					let remaining_ether_asset: Asset =
+						(Location::new(2, [GlobalConsensus(EthereumNetwork::get())]), value).into();
 
 					let expected_assets: Assets = vec![token, remaining_ether_asset].into();
 					assert_eq!(expected_assets, reserve_assets.clone());
@@ -555,14 +548,16 @@ mod tests {
 			if let DepositAsset { ref assets, beneficiary: deposit_beneficiary } = instruction {
 				deposit_asset_found = deposit_asset_found + 1;
 				if deposit_asset_found == 1 {
-					assert_eq!(AssetFilter::from( Wild(AllCounted(1).into())), assets.clone());
+					assert_eq!(AssetFilter::from(Wild(AllCounted(1).into())), assets.clone());
 					assert_eq!(deposit_beneficiary, beneficiary);
 				} else if deposit_asset_found == 2 {
 					let fee_asset_id = Location::new(2, [GlobalConsensus(EthereumNetwork::get())]);
-					assert_eq!(Wild(AllOf { id: AssetId(fee_asset_id.into()), fun: WildFungible }), assets.clone());
+					assert_eq!(
+						Wild(AllOf { id: AssetId(fee_asset_id.into()), fun: WildFungible }),
+						assets.clone()
+					);
 					assert_eq!(deposit_beneficiary, claimer_location);
 				}
-
 			}
 		}
 
@@ -675,10 +670,7 @@ mod tests {
 			relayer_fee,
 		};
 
-		assert_err!(
-			ConverterFailing::convert(message),
-			ConvertMessageError::InvalidAsset
-		);
+		assert_err!(ConverterFailing::convert(message), ConvertMessageError::InvalidAsset);
 	}
 
 	#[test]
@@ -738,9 +730,7 @@ mod tests {
 		// actual claimer should default to message origin
 		assert_eq!(
 			actual_claimer,
-			Some(
-				Location::new(0, [AccountKey20 { network: None, key: origin.into() }])
-			)
+			Some(Location::new(0, [AccountKey20 { network: None, key: origin.into() }]))
 		);
 
 		// Find the last two instructions to check the appendix is correct.

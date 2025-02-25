@@ -31,9 +31,12 @@ sol! {
 			uint8 kind;
 			bytes data;
 		}
-		struct TokenRegistration {
+		struct XcmCreateAsset {
 			address token;
 			uint8 network;
+			bytes name;
+			bytes symbol;
+			uint8 decimals;
 		}
 		struct Payload {
 			address origin;
@@ -81,11 +84,11 @@ impl core::fmt::Debug for IGatewayV2::Xcm {
 }
 
 #[derive(Clone, Encode, Decode, RuntimeDebug, TypeInfo)]
-pub enum XcmCommand {
+pub enum XcmPayload {
 	/// Represents raw XCM bytes
 	Raw(Vec<u8>),
 	/// A token registration template
-	TokenRegistration { token: H160, network: u8 },
+	CreateAsset { token: H160, network: u8, name: Vec<u8>, symbol: Vec<u8>, decimals: u8 },
 }
 
 /// The ethereum side sends messages which are transcoded into XCM on BH. These messages are
@@ -101,7 +104,7 @@ pub struct Message {
 	/// The assets sent from Ethereum (ERC-20s).
 	pub assets: Vec<EthereumAsset>,
 	/// The command originating from the Gateway contract.
-	pub xcm: XcmCommand,
+	pub xcm: XcmPayload,
 	/// The claimer in the case that funds get trapped. Expected to be an XCM::v5::Location.
 	pub claimer: Option<Vec<u8>>,
 	/// Native ether bridged over from Ethereum
@@ -195,9 +198,9 @@ impl TryFrom<&Log> for Message {
 		}
 
 		let xcm = match payload.xcm.kind {
-			0 => XcmCommand::Raw(payload.xcm.data.to_vec()),
+			0 => XcmPayload::Raw(payload.xcm.data.to_vec()),
 			1 => {
-				let reg = IGatewayV2::TokenRegistration::abi_decode(&payload.xcm.data, true)
+				let create_asset = IGatewayV2::XcmCreateAsset::abi_decode(&payload.xcm.data, true)
 					.map_err(|decode_err| {
 						log::debug!(
 							target: LOG_TARGET,
@@ -206,9 +209,12 @@ impl TryFrom<&Log> for Message {
 						);
 						MessageDecodeError
 					})?;
-				XcmCommand::TokenRegistration {
-					token: H160::from(reg.token.as_ref()),
-					network: reg.network,
+				XcmPayload::CreateAsset {
+					token: H160::from(create_asset.token.as_ref()),
+					network: create_asset.network,
+					name: create_asset.name.to_vec(),
+					symbol: create_asset.symbol.to_vec(),
+					decimals: create_asset.decimals,
 				}
 			},
 			_ => return Err(MessageDecodeError),
