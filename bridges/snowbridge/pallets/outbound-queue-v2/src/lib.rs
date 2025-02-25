@@ -291,7 +291,7 @@ pub mod pallet {
 			let receipt = DeliveryReceiptOf::<T>::try_from(&event.event_log)
 				.map_err(|_| Error::<T>::InvalidEnvelope)?;
 
-			Self::do_process_delivery_receipt(relayer, receipt)
+			Self::process_delivery_receipt(relayer, receipt)
 		}
 	}
 
@@ -392,7 +392,7 @@ pub mod pallet {
 		}
 
 		/// Process a delivery receipt from a relayer, to allocate the relayer reward.
-		pub fn do_process_delivery_receipt(
+		pub fn process_delivery_receipt(
 			relayer: <T as frame_system::Config>::AccountId,
 			receipt: DeliveryReceiptOf<T>,
 		) -> DispatchResult
