@@ -245,7 +245,7 @@ pub mod pallet {
 		}
 
 		/// Reanchor the `location` in context of ethereum
-		fn reanchor(location: &Location) -> Result<Location, Error<T>> {
+		pub fn reanchor(location: &Location) -> Result<Location, Error<T>> {
 			location
 				.clone()
 				.reanchored(&T::EthereumLocation::get(), &T::UniversalLocation::get())
