@@ -55,7 +55,7 @@ use snowbridge_inbound_queue_primitives::{
 use sp_core::H160;
 use xcm::prelude::{ExecuteXcm, Junction::*, Location, SendXcm, *};
 
-use pallet_bridge_relayers::RewardLedger;
+use bp_relayers::RewardLedger;
 #[cfg(feature = "runtime-benchmarks")]
 use {snowbridge_beacon_primitives::BeaconHeader, sp_core::H256};
 

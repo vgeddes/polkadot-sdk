@@ -73,17 +73,14 @@ use alloy_core::{
 	primitives::{Bytes, FixedBytes},
 	sol_types::SolValue,
 };
+use bp_relayers::RewardLedger;
 use bridge_hub_common::{AggregateMessageOrigin, CustomDigestItem};
 use codec::Decode;
 use frame_support::{
 	storage::StorageStreamIter,
-	traits::{
-		tokens::Balance,
-		EnqueueMessage, Get, ProcessMessageError,
-	},
+	traits::{tokens::Balance, EnqueueMessage, Get, ProcessMessageError},
 	weights::{Weight, WeightToFee},
 };
-use pallet_bridge_relayers::RewardLedger;
 use snowbridge_core::{BasicOperatingMode, TokenId};
 use snowbridge_merkle_tree::merkle_root;
 use snowbridge_outbound_queue_primitives::{
@@ -397,8 +394,11 @@ pub mod pallet {
 		/// Process a delivery receipt from a relayer, to allocate the relayer reward.
 		pub fn do_process_delivery_receipt(
 			relayer: <T as frame_system::Config>::AccountId,
-			receipt: DeliveryReceiptOf<T> ,
-		) -> DispatchResult where <T as frame_system::Config>::AccountId: From<[u8; 32]> {
+			receipt: DeliveryReceiptOf<T>,
+		) -> DispatchResult
+		where
+			<T as frame_system::Config>::AccountId: From<[u8; 32]>,
+		{
 			// Verify that the message was submitted from the known Gateway contract
 			ensure!(T::GatewayAddress::get() == receipt.gateway, Error::<T>::InvalidGateway);
 
@@ -408,11 +408,7 @@ pub mod pallet {
 
 			if order.fee > 0 {
 				// Pay relayer reward
-				T::RewardPayment::register_reward(
-					&relayer,
-					T::DefaultRewardKind::get(),
-					order.fee,
-				);
+				T::RewardPayment::register_reward(&relayer, T::DefaultRewardKind::get(), order.fee);
 			}
 
 			<PendingOrders<T>>::remove(nonce);

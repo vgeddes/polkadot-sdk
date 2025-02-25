@@ -41,7 +41,7 @@ snowbridge-core = { workspace = true }
 snowbridge-pallet-inbound-queue-fixtures-v2 = { optional = true, workspace = true }
 snowbridge-inbound-queue-primitives = { workspace = true }
 
-pallet-bridge-relayers = { workspace = true }
+bp-relayers = { workspace = true }
 
 [dev-dependencies]
 frame-benchmarking = { workspace = true, default-features = true }
@@ -54,13 +54,13 @@ sp-keyring = { workspace = true, default-features = true }
 default = ["std"]
 std = [
     "alloy-core/std",
+    "bp-relayers/std",
     "codec/std",
     "frame-benchmarking/std",
     "frame-support/std",
     "frame-system/std",
     "log/std",
     "pallet-balances/std",
-    "pallet-bridge-relayers/std",
     "scale-info/std",
     "serde",
     "snowbridge-beacon-primitives/std",
@@ -83,7 +83,6 @@ runtime-benchmarks = [
 	"frame-system/runtime-benchmarks",
 	"hex-literal",
 	"pallet-balances/runtime-benchmarks",
-    "pallet-bridge-relayers/runtime-benchmarks",
 	"snowbridge-core/runtime-benchmarks",
 	"snowbridge-pallet-ethereum-client/runtime-benchmarks",
 	"snowbridge-pallet-inbound-queue-fixtures-v2/runtime-benchmarks",

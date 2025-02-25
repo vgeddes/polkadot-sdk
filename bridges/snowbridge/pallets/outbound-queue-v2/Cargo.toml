@@ -17,6 +17,8 @@ targets = ["x86_64-unknown-linux-gnu"]
 [dependencies]
 alloy-core = { workspace = true, features = ["sol-types"] }
 codec = { features = ["derive"], workspace = true }
+ethabi = { workspace = true }
+hex-literal = { workspace = true, default-features = true }
 scale-info = { features = ["derive"], workspace = true }
 serde = { features = ["alloc", "derive"], workspace = true }
 
@@ -30,17 +32,15 @@ sp-runtime = { workspace = true }
 sp-std = { workspace = true }
 
 bridge-hub-common = { workspace = true }
+bp-relayers = { workspace = true }
 
-ethabi = { workspace = true }
-hex-literal = { workspace = true, default-features = true }
 snowbridge-core = { workspace = true }
 snowbridge-merkle-tree = { workspace = true }
 snowbridge-outbound-queue-primitives = { workspace = true }
+
 xcm = { workspace = true }
 xcm-builder = { workspace = true }
 xcm-executor = { workspace = true }
-
-pallet-bridge-relayers = { workspace = true }
 
 [dev-dependencies]
 pallet-message-queue = { workspace = true }
@@ -50,13 +50,13 @@ sp-keyring = { workspace = true, default-features = true }
 default = ["std"]
 std = [
     "alloy-core/std",
+    "bp-relayers/std",
     "bridge-hub-common/std",
     "codec/std",
     "ethabi/std",
     "frame-benchmarking/std",
     "frame-support/std",
     "frame-system/std",
-    "pallet-bridge-relayers/std",
     "pallet-message-queue/std",
     "scale-info/std",
     "serde/std",
@@ -79,7 +79,6 @@ runtime-benchmarks = [
     "frame-support/runtime-benchmarks",
     "frame-system/runtime-benchmarks",
     "pallet-message-queue/runtime-benchmarks",
-    "pallet-bridge-relayers/runtime-benchmarks",
     "snowbridge-core/runtime-benchmarks",
     "sp-runtime/runtime-benchmarks",
     "xcm-builder/runtime-benchmarks",
