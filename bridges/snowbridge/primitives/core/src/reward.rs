@@ -22,7 +22,6 @@ use xcm::{
 pub enum RewardPaymentError {
 	XcmSendFailure,
 	ChargeFeesFailure,
-	XcmDeliveryFailure,
 }
 
 impl From<RewardPaymentError> for DispatchError {
@@ -30,7 +29,6 @@ impl From<RewardPaymentError> for DispatchError {
 		match e {
 			RewardPaymentError::XcmSendFailure => DispatchError::Other("xcm send failure"),
 			RewardPaymentError::ChargeFeesFailure => DispatchError::Other("charge fees error"),
-			RewardPaymentError::XcmDeliveryFailure => DispatchError::Other("xcm delivery failure"),
 		}
 	}
 }
@@ -135,7 +133,7 @@ where
 		let (ticket, fee) =
 			validate_send::<XcmSender>(AssetHubLocation::get(), xcm).map_err(|_| XcmSendFailure)?;
 		XcmExecutor::charge_fees(relayer.clone(), fee.clone()).map_err(|_| ChargeFeesFailure)?;
-		XcmSender::deliver(ticket).map_err(|_| XcmDeliveryFailure)?;
+		XcmSender::deliver(ticket).map_err(|_| XcmSendFailure)?;
 
 		Ok(())
 	}
