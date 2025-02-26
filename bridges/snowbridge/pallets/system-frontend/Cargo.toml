@@ -65,7 +65,7 @@ runtime-benchmarks = [
 	"pallet-balances/runtime-benchmarks",
 	"pallet-xcm/runtime-benchmarks",
 	"snowbridge-core/runtime-benchmarks",
-    "snowbridge-test-utils/runtime-benchmarks",
+	"snowbridge-test-utils/runtime-benchmarks",
 	"sp-runtime/runtime-benchmarks",
 	"xcm-executor/runtime-benchmarks",
 	"xcm/runtime-benchmarks",
