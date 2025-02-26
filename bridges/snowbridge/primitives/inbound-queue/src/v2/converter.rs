@@ -107,7 +107,7 @@ where
 		let remote_xcm: Xcm<()> = match &message.xcm {
 			XcmPayload::Raw(raw) => Self::decode_raw_xcm(raw),
 			XcmPayload::CreateAsset { token, network } =>
-				Self::create_asset_xcm(token, *network, message.value)?,
+				Self::make_create_asset_xcm(token, *network, message.value)?,
 		};
 
 		// Asset to cover XCM execution fee
@@ -169,7 +169,7 @@ where
 	/// Construct the `Xcm<()>` needed to create a new asset on Polkadot.
 	/// Returns an error if the source network is not Ethereum and the target network is not
 	/// Polkadot.
-	fn create_asset_xcm(
+	fn make_create_asset_xcm(
 		token: &H160,
 		network: u8,
 		eth_value: u128,
@@ -197,7 +197,7 @@ where
 		);
 
 		match network {
-			0 => Ok(Self::make_create_asset_for_polkadot(
+			0 => Ok(Self::make_create_asset_xcm_for_polkadot(
 				create_call_index,
 				asset_id,
 				bridge_owner,
@@ -208,7 +208,7 @@ where
 		}
 	}
 
-	fn make_create_asset_for_polkadot(
+	fn make_create_asset_xcm_for_polkadot(
 		create_call_index: [u8; 2],
 		asset_id: Location,
 		bridge_owner: [u8; 32],

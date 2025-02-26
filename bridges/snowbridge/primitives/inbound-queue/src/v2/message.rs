@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2023 Snowfork <hello@snowfork.com>
 //! Converts messages from Ethereum to XCM messages
 
-use crate::{v2::LOG_TARGET, Log};
+use crate::Log;
 use alloy_core::{
 	primitives::B256,
 	sol,
@@ -145,14 +145,7 @@ impl TryFrom<&Log> for Message {
 
 		// Decode the Solidity event from raw logs
 		let event = IGatewayV2::OutboundMessageAccepted::decode_raw_log(topics, &log.data, true)
-			.map_err(|decode_err| {
-				log::debug!(
-					target: LOG_TARGET,
-					"decode message error {:?}",
-					decode_err
-				);
-				MessageDecodeError
-			})?;
+			.map_err(|_| MessageDecodeError)?;
 
 		let payload = event.payload;
 
@@ -160,14 +153,7 @@ impl TryFrom<&Log> for Message {
 			match asset.kind {
 				0 => {
 					let native_data = IGatewayV2::AsNativeTokenERC20::abi_decode(&asset.data, true)
-						.map_err(|decode_err| {
-							log::debug!(
-								target: LOG_TARGET,
-								"decode native asset error {:?}",
-								decode_err
-							);
-							MessageDecodeError
-						})?;
+						.map_err(|_| MessageDecodeError)?;
 					substrate_assets.push(EthereumAsset::NativeTokenERC20 {
 						token_id: H160::from(native_data.token_id.as_ref()),
 						value: native_data.value,
@@ -175,16 +161,8 @@ impl TryFrom<&Log> for Message {
 				},
 				1 => {
 					let foreign_data =
-						IGatewayV2::AsForeignTokenERC20::abi_decode(&asset.data, true).map_err(
-							|decode_err| {
-								log::debug!(
-									target: LOG_TARGET,
-									"decode foreign asset error {:?}",
-									decode_err
-								);
-								MessageDecodeError
-							},
-						)?;
+						IGatewayV2::AsForeignTokenERC20::abi_decode(&asset.data, true)
+							.map_err(|_| MessageDecodeError)?;
 					substrate_assets.push(EthereumAsset::ForeignTokenERC20 {
 						token_id: H256::from(foreign_data.token_id.as_ref()),
 						value: foreign_data.value,
@@ -198,14 +176,7 @@ impl TryFrom<&Log> for Message {
 			0 => XcmPayload::Raw(payload.xcm.data.to_vec()),
 			1 => {
 				let create_asset = IGatewayV2::XcmCreateAsset::abi_decode(&payload.xcm.data, true)
-					.map_err(|decode_err| {
-						log::debug!(
-							target: LOG_TARGET,
-							"decode create asset error: {:?}",
-							decode_err
-						);
-						MessageDecodeError
-					})?;
+					.map_err(|_| MessageDecodeError)?;
 				XcmPayload::CreateAsset {
 					token: H160::from(create_asset.token.as_ref()),
 					network: create_asset.network,
