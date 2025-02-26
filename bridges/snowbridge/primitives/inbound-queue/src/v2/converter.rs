@@ -18,6 +18,7 @@ use xcm::{
 use super::{message::*, traits::*};
 use crate::{CallIndex, EthereumLocationsConverterFor};
 use sp_runtime::MultiAddress;
+use xcm::opaque::latest::AssetTransferFilter::ReserveDeposit;
 
 const MINIMUM_DEPOSIT: u128 = 1;
 
@@ -203,6 +204,14 @@ where
 				dot_fee,
 				eth_asset,
 			)),
+			1 => Ok(Self::make_create_asset_xcm_for_kusama(
+				create_call_index,
+				asset_id,
+				bridge_owner,
+				dot_fee,
+				eth_asset,
+				eth_value,
+			)),
 			_ => Err(ConvertMessageError::InvalidNetwork),
 		}
 	}
@@ -239,6 +248,63 @@ where
 			},
 		]
 		.into()
+	}
+
+	fn make_create_asset_xcm_for_kusama(
+		create_call_index: [u8; 2],
+		asset_id: Location,
+		bridge_owner: [u8; 32],
+		dot_fee_asset: xcm::prelude::Asset,
+		eth_asset: xcm::prelude::Asset,
+		eth_value: u128,
+	) -> Xcm<()> {
+		let eth_fee_ah: xcm::prelude::Asset = (Location::new(2, [GlobalConsensus(EthereumNetwork::get())]), 2_000_000_000_000u128).into();
+		let leftover_eth = eth_value - 4_000_000_000_000u128;
+		let eth_asset: xcm::prelude::Asset =
+			(Location::new(2, [GlobalConsensus(EthereumNetwork::get())]), leftover_eth).into();
+
+		vec![
+			ExchangeAsset {
+				give: eth_fee_ah.clone().into(),
+				want: dot_fee_asset.clone().into(),
+				maximal: true,
+			},
+			//RefundSurplus,
+			InitiateTransfer {
+				// AHK
+				destination: Location::new(2, [
+					GlobalConsensus(ByGenesis(xcm::latest::ROCOCO_GENESIS_HASH)),
+					Parachain(1000u32),]),
+				remote_fees: Some(ReserveDeposit(Definite(vec![eth_fee_ah.clone()].into()))),
+				preserve_origin: true,
+				assets: vec![ReserveDeposit(Definite(vec![eth_asset.clone()].into()))],
+				remote_xcm: vec![
+					ExchangeAsset {
+						give: eth_asset.clone().into(),
+						want: dot_fee_asset.clone().into(),
+						maximal: false,
+					},
+					// Deposit the dot deposit into the bridge sovereign account (where the asset
+					// creation fee will be deducted from)
+					DepositAsset { assets: dot_fee_asset.into(), beneficiary: bridge_owner.into() },
+					// Call to create the asset.
+					Transact {
+						origin_kind: OriginKind::Xcm,
+						fallback_max_weight: None,
+						call: (
+							create_call_index,
+							asset_id,
+							MultiAddress::<[u8; 32], ()>::Id(bridge_owner.into()),
+							MINIMUM_DEPOSIT,
+						)
+							.encode()
+							.into(),
+					},
+				]
+					.into(),
+			},
+		]
+			.into()
 	}
 
 	/// Parse and (non-strictly) decode `raw` XCM bytes into a `Xcm<()>`.
