@@ -25756,6 +25756,7 @@ dependencies = [
  "snowbridge-inbound-queue-primitives",
  "snowbridge-pallet-ethereum-client 0.2.0",
  "snowbridge-pallet-inbound-queue-fixtures-v2",
+ "snowbridge-test-utils",
  "sp-core 28.0.0",
  "sp-io 30.0.0",
  "sp-keyring 31.0.0",
