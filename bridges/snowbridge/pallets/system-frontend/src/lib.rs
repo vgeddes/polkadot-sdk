@@ -237,6 +237,8 @@ pub mod pallet {
 
 			// Burn DOT
 
+			// Call system v2::add-tip
+
 			Ok(())
 		}
 	}
