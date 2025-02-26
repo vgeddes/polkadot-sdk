@@ -3,13 +3,14 @@
 use super::*;
 
 use crate::{self as inbound_queue_v2};
-use codec::Encode;
+use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::{
 	derive_impl, parameter_types,
 	traits::ConstU32,
 	weights::{constants::RocksDbWeight, IdentityFee},
 };
 use hex_literal::hex;
+use scale_info::TypeInfo;
 use snowbridge_beacon_primitives::{
 	types::deneb, BeaconHeader, ExecutionProof, Fork, ForkVersions, VersionedExecutionPayloadHeader,
 };
@@ -17,8 +18,8 @@ use snowbridge_core::TokenId;
 use snowbridge_inbound_queue_primitives::{v2::MessageToXcm, Log, Proof, VerificationError};
 use sp_core::H160;
 use sp_runtime::{
-	traits::{IdentifyAccount, IdentityLookup, MaybeEquivalence, Verify},
-	BuildStorage, MultiSignature,
+	traits::{IdentityLookup, MaybeEquivalence},
+	BuildStorage,
 };
 use sp_std::{convert::From, default::Default, marker::PhantomData};
 use xcm::{latest::SendXcm, opaque::latest::WESTEND_GENESIS_HASH, prelude::*};
@@ -34,9 +35,7 @@ frame_support::construct_runtime!(
 	}
 );
 
-pub type Signature = MultiSignature;
-pub type AccountId = <<Signature as Verify>::Signer as IdentifyAccount>::AccountId;
-
+pub type AccountId = sp_runtime::AccountId32;
 type Balance = u128;
 
 #[derive_impl(frame_system::config_preludes::TestDefaultConfig)]
@@ -188,8 +187,25 @@ parameter_types! {
 		[GlobalConsensus(ByGenesis(WESTEND_GENESIS_HASH)), Parachain(1002)].into();
 	pub AssetHubFromEthereum: Location = Location::new(1,[GlobalConsensus(ByGenesis(WESTEND_GENESIS_HASH)),Parachain(1000)]);
 	pub const InitialFund: u128 = 1_000_000_000_000;
+	pub DefaultMyRewardKind: BridgeReward = BridgeReward::Snowbridge;
 	pub const CreateAssetCall: [u8;2] = [53, 0];
 	pub const CreateAssetDeposit: u128 = 10_000_000_000u128;
+}
+
+/// Showcasing that we can handle multiple different rewards with the same pallet.
+#[derive(Clone, Copy, Debug, Decode, Encode, Eq, MaxEncodedLen, PartialEq, TypeInfo)]
+pub enum BridgeReward {
+	/// Rewards for Snowbridge.
+	Snowbridge,
+}
+
+impl RewardLedger<<mock::Test as frame_system::Config>::AccountId, BridgeReward, u128> for () {
+	fn register_reward(
+		_relayer: &<mock::Test as frame_system::Config>::AccountId,
+		_reward: BridgeReward,
+		_reward_balance: u128,
+	) {
+	}
 }
 
 impl inbound_queue_v2::Config for Test {
@@ -218,6 +234,8 @@ impl inbound_queue_v2::Config for Test {
 	type WeightToFee = IdentityFee<u128>;
 	type Token = Balances;
 	type AccountToLocation = MockAccountLocationConverter<AccountId>;
+	type RewardKind = BridgeReward;
+	type DefaultRewardKind = DefaultMyRewardKind;
 }
 
 pub fn setup() {
@@ -362,6 +380,8 @@ pub mod mock_xcm_send_failure {
 		type WeightToFee = IdentityFee<u128>;
 		type Token = Balances;
 		type AccountToLocation = MockAccountLocationConverter<AccountId>;
+		type RewardKind = BridgeReward;
+		type DefaultRewardKind = DefaultMyRewardKind;
 	}
 
 	impl snowbridge_pallet_ethereum_client::Config for TestXcmSendFailure {
@@ -464,6 +484,8 @@ pub mod mock_xcm_validate_failure {
 		type WeightToFee = IdentityFee<u128>;
 		type Token = Balances;
 		type AccountToLocation = MockAccountLocationConverter<AccountId>;
+		type RewardKind = BridgeReward;
+		type DefaultRewardKind = DefaultMyRewardKind;
 	}
 
 	impl snowbridge_pallet_ethereum_client::Config for Test {
@@ -558,6 +580,8 @@ pub mod mock_charge_fees_failure {
 		type WeightToFee = IdentityFee<u128>;
 		type Token = Balances;
 		type AccountToLocation = MockAccountLocationConverter<AccountId>;
+		type RewardKind = BridgeReward;
+		type DefaultRewardKind = DefaultMyRewardKind;
 	}
 
 	impl snowbridge_pallet_ethereum_client::Config for Test {
