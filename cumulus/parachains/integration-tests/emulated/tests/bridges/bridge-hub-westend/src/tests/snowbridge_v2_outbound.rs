@@ -442,7 +442,7 @@ fn transact_with_agent_from_asset_hub() {
 		let reward_account = AssetHubWestendReceiver::get();
 		let receipt = DeliveryReceipt {
 			gateway: EthereumGatewayAddress::get(),
-			nonce: 1,
+			nonce: 0,
 			reward_address: reward_account,
 			success: true,
 		};
