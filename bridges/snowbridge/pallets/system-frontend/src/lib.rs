@@ -160,11 +160,10 @@ pub mod pallet {
 		}
 	}
 
-	/// The current operating mode of the pallet.
+	/// The current operating mode for exporting to Ethereum.
 	#[pallet::storage]
-	#[pallet::getter(fn operating_mode)]
-	pub type OperatingMode<T: Config> = StorageValue<_, BasicOperatingMode, ValueQuery>;
-
+	#[pallet::getter(fn export_operating_mode)]
+	pub type ExportOperatingMode<T: Config> = StorageValue<_, BasicOperatingMode, ValueQuery>;
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
 		/// Initiates the registration for a Polkadot-native token as a wrapped ERC20 token on
