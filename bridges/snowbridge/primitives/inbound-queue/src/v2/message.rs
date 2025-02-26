@@ -85,7 +85,7 @@ pub enum XcmPayload {
 	/// Represents raw XCM bytes
 	Raw(Vec<u8>),
 	/// A token registration template
-	CreateAsset { token: H160, network: u8, },
+	CreateAsset { token: H160, network: u8 },
 }
 
 /// The ethereum side sends messages which are transcoded into XCM on BH. These messages are

@@ -105,13 +105,9 @@ where
 		let ether_location = Location::new(2, [GlobalConsensus(EthereumNetwork::get())]);
 
 		let remote_xcm: Xcm<()> = match &message.xcm {
-			XcmPayload::Raw(raw) => decode_raw_xcm(raw),
-			XcmPayload::CreateAsset { token, network, } =>
-				create_asset_xcm::<
-					CreateAssetCall,
-					CreateAssetDeposit,
-					EthereumNetwork,
-				>(token, *network, message.value)?,
+			XcmPayload::Raw(raw) => Self::decode_raw_xcm(raw),
+			XcmPayload::CreateAsset { token, network } =>
+				Self::create_asset_xcm(token, *network, message.value)?,
 		};
 
 		// Asset to cover XCM execution fee
@@ -169,87 +165,97 @@ where
 
 		Ok(prepared_message)
 	}
-}
 
-/// Parse and (non-strictly) decode `raw` XCM bytes into a `Xcm<()>`.
-/// If decoding fails, return an empty `Xcm<()>`—thus allowing the message
-/// to proceed so assets can still be trapped on AH rather than the funds being locked on Ethereum
-/// but not accessible on AH.
-fn decode_raw_xcm(raw: &[u8]) -> Xcm<()> {
-	if let Ok(versioned_xcm) =
-		VersionedXcm::<()>::decode_with_depth_limit(MAX_XCM_DECODE_DEPTH, &mut raw.as_ref())
-	{
-		if let Ok(decoded_xcm) = versioned_xcm.try_into() {
-			return decoded_xcm;
+	/// Construct the `Xcm<()>` needed to create a new asset on Polkadot.
+	/// Returns an error if the source network is not Ethereum and the target network is not
+	/// Polkadot.
+	fn create_asset_xcm(
+		token: &H160,
+		network: u8,
+		eth_value: u128,
+	) -> Result<Xcm<()>, ConvertMessageError> {
+		let chain_id = match EthereumNetwork::get() {
+			NetworkId::Ethereum { chain_id } => chain_id,
+			_ => return Err(ConvertMessageError::InvalidNetwork),
+		};
+		let bridge_owner = EthereumLocationsConverterFor::<[u8; 32]>::from_chain_id(&chain_id);
+
+		let dot_asset = Location::new(1, Here);
+		let dot_fee: xcm::prelude::Asset = (dot_asset, CreateAssetDeposit::get()).into();
+
+		let eth_asset: xcm::prelude::Asset =
+			(Location::new(2, [GlobalConsensus(EthereumNetwork::get())]), eth_value).into();
+
+		let create_call_index: [u8; 2] = CreateAssetCall::get();
+
+		let asset_id = Location::new(
+			2,
+			[
+				GlobalConsensus(EthereumNetwork::get()),
+				AccountKey20 { network: None, key: (*token).into() },
+			],
+		);
+
+		match network {
+			0 => Ok(Self::make_create_asset_for_polkadot(
+				create_call_index,
+				asset_id,
+				bridge_owner,
+				dot_fee,
+				eth_asset,
+			)),
+			_ => Err(ConvertMessageError::InvalidNetwork),
 		}
 	}
-	// Decoding failed; allow an empty XCM so the message won't fail entirely.
-	Xcm::new()
-}
 
-/// Construct the `Xcm<()>` needed to create a new asset on Polkadot.
-/// Returns an error if the source network is not Ethereum and the target network is not Polkadot.
-fn create_asset_xcm<CreateAssetCall, CreateAssetDeposit, EthereumNetwork>(
-	token: &H160,
-	network: u8,
-	eth_value: u128,
-) -> Result<Xcm<()>, ConvertMessageError>
-where
-	CreateAssetCall: Get<CallIndex>,
-	CreateAssetDeposit: Get<u128>,
-	EthereumNetwork: Get<NetworkId>,
-{
-	let chain_id = match EthereumNetwork::get() {
-		NetworkId::Ethereum { chain_id } => chain_id,
-		_ => return Err(ConvertMessageError::InvalidNetwork),
-	};
-	let bridge_owner = EthereumLocationsConverterFor::<[u8; 32]>::from_chain_id(&chain_id);
+	fn make_create_asset_for_polkadot(
+		create_call_index: [u8; 2],
+		asset_id: Location,
+		bridge_owner: [u8; 32],
+		dot_fee_asset: xcm::prelude::Asset,
+		eth_asset: xcm::prelude::Asset,
+	) -> Xcm<()> {
+		vec![
+			// Exchange eth for dot to pay the asset creation deposit.
+			ExchangeAsset {
+				give: eth_asset.into(),
+				want: dot_fee_asset.clone().into(),
+				maximal: false,
+			},
+			// Deposit the dot deposit into the bridge sovereign account (where the asset
+			// creation fee will be deducted from).
+			DepositAsset { assets: dot_fee_asset.clone().into(), beneficiary: bridge_owner.into() },
+			// Call to create the asset.
+			Transact {
+				origin_kind: OriginKind::Xcm,
+				fallback_max_weight: None,
+				call: (
+					create_call_index,
+					asset_id.clone(),
+					MultiAddress::<[u8; 32], ()>::Id(bridge_owner.into()),
+					MINIMUM_DEPOSIT,
+				)
+					.encode()
+					.into(),
+			},
+		]
+		.into()
+	}
 
-	let dot_asset = Location::new(1, Here);
-	let dot_fee: xcm::prelude::Asset = (dot_asset, CreateAssetDeposit::get()).into();
-
-	let eth_asset: xcm::prelude::Asset =
-		(Location::new(2, [GlobalConsensus(EthereumNetwork::get())]), eth_value).into();
-
-	let create_call_index: [u8; 2] = CreateAssetCall::get();
-
-	let asset_id = Location::new(
-		2,
-		[
-			GlobalConsensus(EthereumNetwork::get()),
-			AccountKey20 { network: None, key: (*token).into() },
-		],
-	);
-
-	match network {
-		0 => {
-			Ok(vec![
-				// Exchange eth for dot to pay the asset creation deposit.
-				ExchangeAsset {
-					give: eth_asset.clone().into(),
-					want: dot_fee.clone().into(),
-					maximal: false,
-				},
-				// Deposit the dot deposit into the bridge sovereign account (where the asset
-				// creation fee will be deducted from).
-				DepositAsset { assets: dot_fee.clone().into(), beneficiary: bridge_owner.into() },
-				// Call to create the asset.
-				Transact {
-					origin_kind: OriginKind::Xcm,
-					fallback_max_weight: None,
-					call: (
-						create_call_index,
-						asset_id.clone(),
-						MultiAddress::<[u8; 32], ()>::Id(bridge_owner.into()),
-						MINIMUM_DEPOSIT,
-					)
-						.encode()
-						.into(),
-				},
-			]
-			.into())
-		},
-		_ => Err(ConvertMessageError::InvalidNetwork),
+	/// Parse and (non-strictly) decode `raw` XCM bytes into a `Xcm<()>`.
+	/// If decoding fails, return an empty `Xcm<()>`—thus allowing the message
+	/// to proceed so assets can still be trapped on AH rather than the funds being locked on
+	/// Ethereum but not accessible on AH.
+	fn decode_raw_xcm(raw: &[u8]) -> Xcm<()> {
+		if let Ok(versioned_xcm) =
+			VersionedXcm::<()>::decode_with_depth_limit(MAX_XCM_DECODE_DEPTH, &mut raw.as_ref())
+		{
+			if let Ok(decoded_xcm) = versioned_xcm.try_into() {
+				return decoded_xcm;
+			}
+		}
+		// Decoding failed; allow an empty XCM so the message won't fail entirely.
+		Xcm::new()
 	}
 }
 
