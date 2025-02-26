@@ -128,7 +128,7 @@ pub mod pallet {
 			message_id: XcmHash,
 		},
 		/// Set OperatingMode
-		OperatingModeChanged { mode: BasicOperatingMode },
+		ExportOperatingModeChanged { mode: BasicOperatingMode },
 	}
 
 	#[pallet::error]
@@ -164,6 +164,7 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn export_operating_mode)]
 	pub type ExportOperatingMode<T: Config> = StorageValue<_, BasicOperatingMode, ValueQuery>;
+
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
 		/// Initiates the registration for a Polkadot-native token as a wrapped ERC20 token on
@@ -183,7 +184,7 @@ pub mod pallet {
 			asset_id: Box<VersionedLocation>,
 			metadata: AssetMetadata,
 		) -> DispatchResult {
-			ensure!(!Self::operating_mode().is_halted(), Error::<T>::Halted);
+			ensure!(!Self::export_operating_mode().is_halted(), Error::<T>::Halted);
 
 			let asset_location: Location =
 				(*asset_id).try_into().map_err(|_| Error::<T>::UnsupportedLocationVersion)?;
@@ -215,8 +216,8 @@ pub mod pallet {
 			mode: BasicOperatingMode,
 		) -> DispatchResult {
 			ensure_root(origin)?;
-			OperatingMode::<T>::put(mode);
-			Self::deposit_event(Event::OperatingModeChanged { mode });
+			ExportOperatingMode::<T>::put(mode);
+			Self::deposit_event(Event::ExportOperatingModeChanged { mode });
 			Ok(())
 		}
 	}
@@ -274,7 +275,7 @@ pub mod pallet {
 
 	impl<T: Config> ExportPausedQuery for Pallet<T> {
 		fn is_paused() -> bool {
-			Self::operating_mode().is_halted()
+			Self::export_operating_mode().is_halted()
 		}
 	}
 }
