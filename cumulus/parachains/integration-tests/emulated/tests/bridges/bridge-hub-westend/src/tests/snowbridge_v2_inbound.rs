@@ -41,6 +41,9 @@ use sp_core::{H160, H256};
 use sp_runtime::MultiAddress;
 use xcm::opaque::latest::AssetTransferFilter::ReserveDeposit;
 use xcm_executor::traits::ConvertLocation;
+use crate::tests::snowbridge_common::set_up_eth_and_dot_pool_on_rococo;
+use crate::tests::snowbridge_v2_outbound_from_rococo::asset_hub_westend_location;
+use crate::tests::asset_hub_rococo_location;
 
 const TOKEN_AMOUNT: u128 = 100_000_000_000;
 
@@ -50,6 +53,114 @@ const INITIAL_FUND: u128 = 5_000_000_000_000;
 /// An ERC-20 token to be registered and sent.
 const TOKEN_ID: [u8; 20] = hex!("c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2");
 const CHAIN_ID: u64 = 11155111u64;
+
+#[test]
+fn register_token_on_rococo_v2() {
+	let relayer = BridgeHubWestendSender::get();
+	let receiver = AssetHubWestendReceiver::get();
+
+	BridgeHubWestend::fund_accounts(vec![(relayer.clone(), INITIAL_FUND)]);
+	AssetHubWestend::fund_accounts(vec![(snowbridge_sovereign(), INITIAL_FUND)]);
+
+	let sov_ahw_on_ahr = AssetHubRococo::sovereign_account_of_parachain_on_other_global_consensus(
+		ByGenesis(WESTEND_GENESIS_HASH),
+		AssetHubWestend::para_id(),
+	);
+	AssetHubRococo::fund_accounts(vec![(sov_ahw_on_ahr, INITIAL_FUND)]);
+
+	set_up_eth_and_dot_pool_on_rococo();
+	set_up_eth_and_dot_pool();
+
+	let claimer = Location::new(0, AccountId32 { network: None, id: receiver.clone().into() });
+	let claimer_bytes = claimer.encode();
+
+	let bridge_owner = EthereumLocationsConverterFor::<[u8; 32]>::from_chain_id(&CHAIN_ID);
+
+	let token: H160 = TOKEN_ID.into();
+	let asset_id = erc20_token_location(token.into());
+
+	let dot_asset = Location::new(1, Here);
+	let dot_fee: xcm::prelude::Asset = (dot_asset, CreateAssetDeposit::get()).into();
+
+	let eth_asset_value = 9_000_000_000_000u128;
+	let asset_deposit: xcm::prelude::Asset = (eth_location(), eth_asset_value).into();
+
+	AssetHubWestend::force_xcm_version(asset_hub_rococo_location(), XCM_VERSION);
+
+	BridgeHubWestend::execute_with(|| {
+		type RuntimeEvent = <BridgeHubWestend as Chain>::RuntimeEvent;
+		let origin = EthereumGatewayAddress::get();
+
+		let message = Message {
+			gateway: origin,
+			nonce: 1,
+			origin,
+			assets: vec![],
+			xcm: XcmPayload::CreateAsset { token, network: 1 },
+			claimer: Some(claimer_bytes),
+			// Used to pay the asset creation deposit.
+			value: 14_000_000_000_000u128,
+			execution_fee: 1_500_000_000_000u128,
+			relayer_fee: 1_500_000_000_000u128,
+		};
+
+		EthereumInboundQueueV2::process_message(relayer, message).unwrap();
+
+		assert_expected_events!(
+			BridgeHubWestend,
+			vec![RuntimeEvent::XcmpQueue(cumulus_pallet_xcmp_queue::Event::XcmpMessageSent { .. }) => {},]
+		);
+	});
+
+
+	AssetHubWestend::execute_with(|| {
+		type RuntimeEvent = <AssetHubWestend as Chain>::RuntimeEvent;
+
+		assert_expected_events!(
+			AssetHubWestend,
+			vec![
+				// message processed successfully
+				RuntimeEvent::MessageQueue(
+					pallet_message_queue::Event::Processed { success: true, .. }
+				) => {},
+			]
+		);
+	});
+
+	AssetHubRococo::execute_with(|| {
+		type RuntimeEvent = <AssetHubRococo as Chain>::RuntimeEvent;
+
+		assert_expected_events!(
+			AssetHubRococo,
+			vec![
+				// message processed successfully
+				RuntimeEvent::MessageQueue(
+					pallet_message_queue::Event::Processed { success: true, .. }
+				) => {},
+				// Check that the token was created as a foreign asset on AssetHub
+				RuntimeEvent::ForeignAssets(pallet_assets::Event::Created { asset_id, owner, .. }) => {
+					asset_id: *asset_id == erc20_token_location(token),
+					owner: *owner == snowbridge_sovereign(),
+				},
+				// Check that excess fees were paid to the claimer
+				RuntimeEvent::ForeignAssets(pallet_assets::Event::Issued { asset_id, owner, .. }) => {
+					asset_id: *asset_id == eth_location(),
+					owner: *owner == receiver.clone().into(),
+				},
+			]
+		);
+
+		let events = AssetHubRococo::events();
+		// Check that no assets were trapped
+		assert!(
+			!events.iter().any(|event| matches!(
+				event,
+				RuntimeEvent::PolkadotXcm(pallet_xcm::Event::AssetsTrapped { .. })
+			)),
+			"Assets were trapped, should not happen."
+		);
+	});
+}
 
 #[test]
 fn register_token_v2() {
