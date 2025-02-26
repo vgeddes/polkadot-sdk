@@ -26,15 +26,15 @@ pub use backend_weights::*;
 
 use frame_support::{pallet_prelude::*, traits::EnsureOriginWithArg};
 use frame_system::pallet_prelude::*;
-use snowbridge_core::AssetMetadata;
-#[cfg(feature = "runtime-benchmarks")]
-use snowbridge_test_helper_primitives::benchmark_helpers::BenchmarkHelper;
+use snowbridge_core::{operating_mode::ExportPausedQuery, AssetMetadata, BasicOperatingMode};
 use sp_std::prelude::*;
 use xcm::{
 	latest::{validate_send, XcmHash},
 	prelude::*,
 };
 use xcm_executor::traits::{FeeManager, FeeReason, TransactAsset};
+#[cfg(feature = "runtime-benchmarks")]
+use snowbridge_test_helper_primitives::benchmark_helpers::BenchmarkHelper;
 
 pub use pallet::*;
 
@@ -118,6 +118,8 @@ pub mod pallet {
 			message: Xcm<()>,
 			message_id: XcmHash,
 		},
+		/// Set OperatingMode
+		ExportOperatingModeChanged { mode: BasicOperatingMode },
 	}
 
 	#[pallet::error]
@@ -132,6 +134,8 @@ pub mod pallet {
 		FeesNotMet,
 		/// Convert to reanchored location failure
 		LocationConversionFailed,
+		/// Message export is halted
+		Halted,
 		/// The desired destination was unreachable, generally because there is a no way of routing
 		/// to it.
 		Unreachable,
@@ -146,6 +150,11 @@ pub mod pallet {
 			}
 		}
 	}
+
+	/// The current operating mode for exporting to Ethereum.
+	#[pallet::storage]
+	#[pallet::getter(fn export_operating_mode)]
+	pub type ExportOperatingMode<T: Config> = StorageValue<_, BasicOperatingMode, ValueQuery>;
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
@@ -166,6 +175,8 @@ pub mod pallet {
 			asset_id: Box<VersionedLocation>,
 			metadata: AssetMetadata,
 		) -> DispatchResult {
+			ensure!(!Self::export_operating_mode().is_halted(), Error::<T>::Halted);
+
 			let asset_location: Location =
 				(*asset_id).try_into().map_err(|_| Error::<T>::UnsupportedLocationVersion)?;
 			let origin_location = T::RegisterTokenOrigin::ensure_origin(origin, &asset_location)?;
@@ -185,6 +196,19 @@ pub mod pallet {
 				message_id,
 			});
 
+			Ok(())
+		}
+
+		/// Set the operating mode of the pallet, which can restrict messaging to Ethereum.
+		#[pallet::call_index(1)]
+		#[pallet::weight((T::DbWeight::get().reads_writes(1, 1), DispatchClass::Operational))]
+		pub fn set_operating_mode(
+			origin: OriginFor<T>,
+			mode: BasicOperatingMode,
+		) -> DispatchResult {
+			ensure_root(origin)?;
+			ExportOperatingMode::<T>::put(mode);
+			Self::deposit_event(Event::ExportOperatingModeChanged { mode });
 			Ok(())
 		}
 	}
@@ -237,6 +261,12 @@ pub mod pallet {
 				.clone()
 				.reanchored(&T::BridgeHubLocation::get(), &T::UniversalLocation::get())
 				.map_err(|_| Error::<T>::LocationConversionFailed)
+		}
+	}
+
+	impl<T: Config> ExportPausedQuery for Pallet<T> {
+		fn is_paused() -> bool {
+			Self::export_operating_mode().is_halted()
 		}
 	}
 }
