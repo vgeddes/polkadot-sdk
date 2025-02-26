@@ -33,6 +33,7 @@ use xcm::{
 	prelude::*,
 };
 use xcm_executor::traits::{FeeManager, FeeReason, TransactAsset};
+use snowbridge_core::reward::MessageId;
 
 #[cfg(feature = "runtime-benchmarks")]
 use frame_support::traits::OriginTrait;
@@ -218,6 +219,24 @@ pub mod pallet {
 			ensure_root(origin)?;
 			ExportOperatingMode::<T>::put(mode);
 			Self::deposit_event(Event::ExportOperatingModeChanged { mode });
+			Ok(())
+		}
+
+		/// Add an additional relayer tip for a committed message identified by `message_id`.
+		/// The tip asset will be swapped for ether.
+		#[pallet::call_index(2)]
+		#[pallet::weight(
+			T::WeightInfo::add_tip()
+				.saturating_add(T::BackendWeightInfo::transact_add_tip())
+		)]
+		pub fn add_tip(origin: OriginFor<T>, message_id: MessageId, asset: Asset) -> DispatchResult {
+			ensure_signed(origin)?;
+			// Check tip is DOT
+
+			// Convert to ether
+
+			// Burn DOT
+
 			Ok(())
 		}
 	}

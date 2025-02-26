@@ -35,6 +35,7 @@ pub trait WeightInfo {
 	fn register_token() -> Weight;
 	fn upgrade() -> Weight;
 	fn set_operating_mode() -> Weight;
+	fn add_tip() -> Weight;
 }
 
 // For backwards compatibility and tests.
@@ -84,6 +85,16 @@ impl WeightInfo for () {
 		// Minimum execution time: 31_000_000 picoseconds.
 		Weight::from_parts(31_000_000, 3517)
 			.saturating_add(RocksDbWeight::get().reads(4_u64))
+			.saturating_add(RocksDbWeight::get().writes(3_u64))
+	}
+
+	fn add_tip() -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `256`
+		//  Estimated: `6044`
+		// Minimum execution time: 45_000_000 picoseconds.
+		Weight::from_parts(45_000_000, 6044)
+			.saturating_add(RocksDbWeight::get().reads(5_u64))
 			.saturating_add(RocksDbWeight::get().writes(3_u64))
 	}
 }

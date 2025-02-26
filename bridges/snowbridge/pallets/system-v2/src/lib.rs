@@ -45,6 +45,10 @@ use sp_runtime::traits::MaybeEquivalence;
 use sp_std::prelude::*;
 use xcm::prelude::*;
 use xcm_executor::traits::ConvertLocation;
+use snowbridge_core::reward::AddTip;
+use snowbridge_core::reward::MessageId::Inbound;
+use snowbridge_core::reward::MessageId::Outbound;
+use snowbridge_core::reward::MessageId;
 
 use snowbridge_pallet_system::{ForeignToNativeId, NativeToForeignId};
 
@@ -75,7 +79,10 @@ pub mod pallet {
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
 		/// Send messages to Ethereum
-		type OutboundQueue: SendMessage;
+		/// Send messages to Ethereum and add additional relayer rewards if deposited
+		type OutboundQueue: SendMessage + AddTip;
+		/// Add to the relayer reward for a specific message
+		type InboundQueue: AddTip;
 
 		/// Origin check for XCM locations that transact with this pallet
 		type FrontendOrigin: EnsureOrigin<Self::RuntimeOrigin, Success = Location>;
@@ -219,6 +226,22 @@ pub mod pallet {
 				location: location.clone().into(),
 				foreign_token_id: token_id,
 			});
+
+			Ok(())
+		}
+
+		#[pallet::call_index(5)]
+		#[pallet::weight(<T as pallet::Config>::WeightInfo::add_tip())]
+		pub fn add_tip(
+			origin: OriginFor<T>,
+			message_id: MessageId, amount: u128
+		) -> DispatchResult {
+			T::FrontendOrigin::ensure_origin(origin)?;
+
+			match message_id {
+				Inbound(nonce) => <T as pallet::Config>::InboundQueue::add_tip(nonce, amount),
+				Outbound(nonce) => <T as pallet::Config>::OutboundQueue::add_tip(nonce, amount),
+			}
 
 			Ok(())
 		}
