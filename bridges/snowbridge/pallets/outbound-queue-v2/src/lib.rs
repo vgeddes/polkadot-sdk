@@ -81,7 +81,7 @@ use frame_support::{
 	traits::{tokens::Balance, EnqueueMessage, Get, ProcessMessageError},
 	weights::{Weight, WeightToFee},
 };
-use snowbridge_core::{BasicOperatingMode, TokenId};
+use snowbridge_core::{reward::AddTip, BasicOperatingMode, TokenId};
 use snowbridge_merkle_tree::merkle_root;
 use snowbridge_outbound_queue_primitives::{
 	v2::{
@@ -404,6 +404,16 @@ pub mod pallet {
 			T::WeightToFee::weight_to_fee(
 				&T::WeightInfo::do_process_message().saturating_add(T::WeightInfo::commit_single()),
 			)
+		}
+	}
+
+	impl<T: Config> AddTip for Pallet<T> {
+		fn add_tip(nonce: u64, amount: u128) {
+			PendingOrders::<T>::mutate_exists(nonce, |maybe_order| {
+				if let Some(order) = maybe_order.as_mut() {
+					order.fee = order.fee.saturating_add(amount);
+				}
+			});
 		}
 	}
 }
