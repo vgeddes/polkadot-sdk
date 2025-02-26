@@ -14,12 +14,16 @@
 // limitations under the License.
 
 use crate::{imports::*, tests::snowbridge_common::*};
+use bridge_hub_westend_runtime::{
+	bridge_to_ethereum_config::EthereumGatewayAddress, EthereumOutboundQueueV2,
+};
 use emulated_integration_tests_common::{impls::Decode, PenpalBTeleportableAssetLocation};
-use frame_support::{assert_err_ignore_postinfo, assert_noop, pallet_prelude::TypeInfo};
+use frame_support::pallet_prelude::TypeInfo;
 use rococo_westend_system_emulated_network::penpal_emulated_chain::penpal_runtime::xcm_config::LocalTeleportableToAssetHub;
-use snowbridge_core::{AssetMetadata, BasicOperatingMode};
+use snowbridge_core::AssetMetadata;
 use snowbridge_inbound_queue_primitives::EthereumLocationsConverterFor;
-use snowbridge_outbound_queue_primitives::v2::ContractCall;
+use snowbridge_outbound_queue_primitives::v2::{ContractCall, DeliveryReceipt};
+use snowbridge_pallet_outbound_queue_v2::Error;
 use xcm::v5::AssetTransferFilter;
 use xcm_executor::traits::ConvertLocation;
 
@@ -90,7 +94,28 @@ fn send_weth_from_asset_hub_to_ethereum() {
 		// Check that the Ethereum message was queue in the Outbound Queue
 		assert_expected_events!(
 			BridgeHubWestend,
-			vec![RuntimeEvent::EthereumOutboundQueueV2(snowbridge_pallet_outbound_queue_v2::Event::MessageQueued{ .. }) => {},]
+			vec![
+				RuntimeEvent::EthereumOutboundQueueV2(snowbridge_pallet_outbound_queue_v2::Event::MessageQueued{ .. }) => {},
+			]
+		);
+
+		let relayer = BridgeHubWestendSender::get();
+		let reward_account = AssetHubWestendReceiver::get();
+		let receipt = DeliveryReceipt {
+			gateway: EthereumGatewayAddress::get(),
+			nonce: 0,
+			reward_address: reward_account,
+			success: true,
+		};
+
+		// Submit a delivery receipt
+		assert_ok!(EthereumOutboundQueueV2::process_delivery_receipt(relayer, receipt));
+
+		assert_expected_events!(
+			BridgeHubWestend,
+			vec![
+				RuntimeEvent::BridgeRelayers(pallet_bridge_relayers::Event::RewardRegistered { .. }) => {},
+			]
 		);
 	});
 }
@@ -113,14 +138,6 @@ pub fn register_relay_token_from_asset_hub_with_sudo() {
 					decimals: 12,
 				}
 			)
-		);
-	});
-
-	BridgeHubWestend::execute_with(|| {
-		type RuntimeEvent = <BridgeHubWestend as Chain>::RuntimeEvent;
-		assert_expected_events!(
-			BridgeHubWestend,
-			vec![RuntimeEvent::EthereumOutboundQueueV2(snowbridge_pallet_outbound_queue_v2::Event::MessageQueued{ .. }) => {},]
 		);
 	});
 }
@@ -239,6 +256,25 @@ fn transfer_relay_token_from_ah() {
 			BridgeHubWestend,
 			vec![RuntimeEvent::EthereumOutboundQueueV2(snowbridge_pallet_outbound_queue_v2::Event::MessageQueued{ .. }) => {},]
 		);
+
+		let relayer = BridgeHubWestendSender::get();
+		let reward_account = AssetHubWestendReceiver::get();
+		let receipt = DeliveryReceipt {
+			gateway: EthereumGatewayAddress::get(),
+			nonce: 0,
+			reward_address: reward_account,
+			success: true,
+		};
+
+		// Submit a delivery receipt
+		assert_ok!(EthereumOutboundQueueV2::process_delivery_receipt(relayer, receipt));
+
+		assert_expected_events!(
+			BridgeHubWestend,
+			vec![
+				RuntimeEvent::BridgeRelayers(pallet_bridge_relayers::Event::RewardRegistered { .. }) => {},
+			]
+		);
 	});
 }
 
@@ -305,6 +341,25 @@ fn send_weth_and_dot_from_asset_hub_to_ethereum() {
 		assert_expected_events!(
 			BridgeHubWestend,
 			vec![RuntimeEvent::EthereumOutboundQueueV2(snowbridge_pallet_outbound_queue_v2::Event::MessageQueued{ .. }) => {},]
+		);
+
+		let relayer = BridgeHubWestendSender::get();
+		let reward_account = AssetHubWestendReceiver::get();
+		let receipt = DeliveryReceipt {
+			gateway: EthereumGatewayAddress::get(),
+			nonce: 0,
+			reward_address: reward_account,
+			success: true,
+		};
+
+		// Submit a delivery receipt
+		assert_ok!(EthereumOutboundQueueV2::process_delivery_receipt(relayer, receipt));
+
+		assert_expected_events!(
+			BridgeHubWestend,
+			vec![
+				RuntimeEvent::BridgeRelayers(pallet_bridge_relayers::Event::RewardRegistered { .. }) => {},
+			]
 		);
 	});
 }
@@ -381,6 +436,25 @@ fn transact_with_agent_from_asset_hub() {
 		assert_expected_events!(
 			BridgeHubWestend,
 			vec![RuntimeEvent::EthereumOutboundQueueV2(snowbridge_pallet_outbound_queue_v2::Event::MessageQueued{ .. }) => {},]
+		);
+
+		let relayer = BridgeHubWestendSender::get();
+		let reward_account = AssetHubWestendReceiver::get();
+		let receipt = DeliveryReceipt {
+			gateway: EthereumGatewayAddress::get(),
+			nonce: 1,
+			reward_address: reward_account,
+			success: true,
+		};
+
+		// Submit a delivery receipt
+		assert_ok!(EthereumOutboundQueueV2::process_delivery_receipt(relayer, receipt));
+
+		assert_expected_events!(
+			BridgeHubWestend,
+			vec![
+				RuntimeEvent::BridgeRelayers(pallet_bridge_relayers::Event::RewardRegistered { .. }) => {},
+			]
 		);
 	});
 }
@@ -478,6 +552,25 @@ fn register_token_from_penpal() {
 		assert_expected_events!(
 			BridgeHubWestend,
 			vec![RuntimeEvent::EthereumOutboundQueueV2(snowbridge_pallet_outbound_queue_v2::Event::MessageQueued{ .. }) => {},]
+		);
+
+		let relayer = BridgeHubWestendSender::get();
+		let reward_account = AssetHubWestendReceiver::get();
+		let receipt = DeliveryReceipt {
+			gateway: EthereumGatewayAddress::get(),
+			nonce: 0,
+			reward_address: reward_account,
+			success: true,
+		};
+
+		// Submit a delivery receipt
+		assert_ok!(EthereumOutboundQueueV2::process_delivery_receipt(relayer, receipt));
+
+		assert_expected_events!(
+			BridgeHubWestend,
+			vec![
+				RuntimeEvent::EthereumOutboundQueueV2(snowbridge_pallet_outbound_queue_v2::Event::MessageDeliveryProofReceived { .. }) => {},
+			]
 		);
 	});
 }
@@ -621,63 +714,23 @@ fn send_message_from_penpal_to_ethereum_with_user_origin() {
 }
 
 #[test]
-fn export_message_from_asset_hub_to_ethereum_is_banned_when_set_operating_mode() {
-	fund_on_bh();
+fn invalid_nonce_for_delivery_receipt_fails() {
+	BridgeHubWestend::execute_with(|| {
+		type RuntimeEvent = <BridgeHubWestend as Chain>::RuntimeEvent;
+		type Runtime = <BridgeHubWestend as Chain>::Runtime;
 
-	register_assets_on_ah();
+		let relayer = BridgeHubWestendSender::get();
+		let reward_account = AssetHubWestendReceiver::get();
+		let receipt = DeliveryReceipt {
+			gateway: EthereumGatewayAddress::get(),
+			nonce: 0,
+			reward_address: reward_account,
+			success: true,
+		};
 
-	fund_on_ah();
-
-	AssetHubWestend::execute_with(|| {
-		type RuntimeOrigin = <AssetHubWestend as Chain>::RuntimeOrigin;
-		assert_ok!(
-			<AssetHubWestend as AssetHubWestendPallet>::SnowbridgeSystemFrontend::set_operating_mode(
-				RuntimeOrigin::root(),
-				BasicOperatingMode::Halted));
-	});
-
-	AssetHubWestend::execute_with(|| {
-		type RuntimeOrigin = <AssetHubWestend as Chain>::RuntimeOrigin;
-
-		type Runtime = <AssetHubWestend as Chain>::Runtime;
-
-		let local_fee_asset =
-			Asset { id: AssetId(Location::parent()), fun: Fungible(LOCAL_FEE_AMOUNT_IN_DOT) };
-
-		let remote_fee_asset =
-			Asset { id: AssetId(ethereum()), fun: Fungible(REMOTE_FEE_AMOUNT_IN_ETHER) };
-
-		let reserve_asset = Asset { id: AssetId(weth_location()), fun: Fungible(TOKEN_AMOUNT) };
-
-		let assets = vec![reserve_asset.clone(), remote_fee_asset.clone(), local_fee_asset.clone()];
-
-		let xcm = VersionedXcm::from(Xcm(vec![
-			WithdrawAsset(assets.clone().into()),
-			PayFees { asset: local_fee_asset.clone() },
-			InitiateTransfer {
-				destination: ethereum(),
-				remote_fees: Some(AssetTransferFilter::ReserveWithdraw(Definite(
-					remote_fee_asset.clone().into(),
-				))),
-				preserve_origin: true,
-				assets: vec![AssetTransferFilter::ReserveWithdraw(Definite(
-					reserve_asset.clone().into(),
-				))],
-				remote_xcm: Xcm(vec![DepositAsset {
-					assets: Wild(AllCounted(2)),
-					beneficiary: beneficiary(),
-				}]),
-			},
-		]));
-
-		// Send the Weth back to Ethereum
-		assert_err_ignore_postinfo!(
-			<AssetHubWestend as AssetHubWestendPallet>::PolkadotXcm::execute(
-				RuntimeOrigin::signed(AssetHubWestendReceiver::get()),
-				bx!(xcm),
-				Weight::from(EXECUTION_WEIGHT),
-			),
-			pallet_xcm::Error::<Runtime>::LocalExecutionIncomplete
+		assert_err!(
+			EthereumOutboundQueueV2::process_delivery_receipt(relayer, receipt),
+			Error::<Runtime>::InvalidPendingNonce
 		);
 	});
 }
