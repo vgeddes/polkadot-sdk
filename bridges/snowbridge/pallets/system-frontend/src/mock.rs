@@ -1,21 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2023 Snowfork <hello@snowfork.com>
 use crate as snowbridge_system_frontend;
-
+use crate::BenchmarkHelper;
 use frame_support::{
 	derive_impl, parameter_types,
 	traits::{AsEnsureOriginWithArg, Everything},
 };
-pub use snowbridge_test_helper_primitives::{mock_origin::pallet_xcm_origin, mock_xcm::*};
+pub use snowbridge_test_utils::{mock_origin::pallet_xcm_origin, mock_xcm::*};
 use sp_core::H256;
 use sp_runtime::{
 	traits::{BlakeTwo256, IdentityLookup},
 	AccountId32, BuildStorage,
 };
 use xcm::prelude::*;
-
-#[cfg(feature = "runtime-benchmarks")]
-use snowbridge_test_helper_primitives::benchmark_helpers::BenchmarkHelper;
 
 type Block = frame_system::mocking::MockBlock<Test>;
 type AccountId = AccountId32;

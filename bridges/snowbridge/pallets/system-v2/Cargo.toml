@@ -34,7 +34,6 @@ xcm-executor = { workspace = true }
 snowbridge-core = { workspace = true }
 snowbridge-outbound-queue-primitives = { workspace = true }
 snowbridge-pallet-system = { workspace = true }
-snowbridge-test-helper-primitives = { workspace = true }
 
 [dev-dependencies]
 hex = { workspace = true, default-features = true }
@@ -43,7 +42,7 @@ pallet-balances = { workspace = true, default-features = true }
 polkadot-primitives = { workspace = true, default-features = true }
 snowbridge-pallet-outbound-queue-v2 = { workspace = true, default-features = true }
 sp-keyring = { workspace = true, default-features = true }
-
+snowbridge-test-utils = { workspace = true }
 
 [features]
 default = ["std"]
@@ -58,7 +57,6 @@ std = [
 	"snowbridge-core/std",
 	"snowbridge-outbound-queue-primitives/std",
 	"snowbridge-pallet-system/std",
-	"snowbridge-test-helper-primitives/std",
 	"sp-core/std",
 	"sp-io/std",
 	"sp-runtime/std",
@@ -76,7 +74,7 @@ runtime-benchmarks = [
 	"snowbridge-core/runtime-benchmarks",
 	"snowbridge-pallet-outbound-queue-v2/runtime-benchmarks",
 	"snowbridge-pallet-system/runtime-benchmarks",
-    "snowbridge-test-helper-primitives/runtime-benchmarks",
+	"snowbridge-test-utils/runtime-benchmarks",
 	"sp-runtime/runtime-benchmarks",
 	"xcm-executor/runtime-benchmarks",
 	"xcm/runtime-benchmarks",

@@ -32,7 +32,10 @@ pub mod api;
 pub mod weights;
 pub use weights::*;
 
-use frame_support::{pallet_prelude::*, traits::EnsureOrigin};
+use frame_support::{
+	pallet_prelude::*,
+	traits::{EnsureOrigin, OriginTrait},
+};
 use frame_system::pallet_prelude::*;
 use snowbridge_core::{AgentIdOf as LocationHashOf, AssetMetadata, TokenId, TokenIdOf};
 use snowbridge_outbound_queue_primitives::{
@@ -40,8 +43,6 @@ use snowbridge_outbound_queue_primitives::{
 	OperatingMode, SendError,
 };
 use snowbridge_pallet_system::{ForeignToNativeId, NativeToForeignId};
-#[cfg(feature = "runtime-benchmarks")]
-use snowbridge_test_helper_primitives::benchmark_helpers::BenchmarkHelper;
 use sp_core::{H160, H256};
 use sp_io::hashing::blake2_256;
 use sp_runtime::traits::MaybeEquivalence;
@@ -52,6 +53,14 @@ use xcm_executor::traits::ConvertLocation;
 pub use pallet::*;
 
 pub type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
+
+#[cfg(feature = "runtime-benchmarks")]
+pub trait BenchmarkHelper<O>
+where
+	O: OriginTrait,
+{
+	fn make_xcm_origin(location: Location) -> O;
+}
 
 #[frame_support::pallet]
 pub mod pallet {
