@@ -234,7 +234,8 @@ pub mod pallet {
 		#[pallet::weight(<T as pallet::Config>::WeightInfo::add_tip())]
 		pub fn add_tip(
 			origin: OriginFor<T>,
-			message_id: MessageId, amount: u128
+			message_id: MessageId,
+			amount: u128
 		) -> DispatchResult {
 			T::FrontendOrigin::ensure_origin(origin)?;
 

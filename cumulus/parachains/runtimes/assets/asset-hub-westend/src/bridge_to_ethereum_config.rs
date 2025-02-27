@@ -25,6 +25,8 @@ use pallet_xcm::{EnsureXcm, Origin as XcmOrigin};
 use testnet_parachains_constants::westend::snowbridge::EthereumNetwork;
 use xcm::prelude::{Asset, InteriorLocation, Location, PalletInstance, Parachain};
 use xcm_executor::XcmExecutor;
+use crate::AssetConversion;
+use crate::ForeignAssets;
 
 use crate::xcm_config::UniversalLocation;
 #[cfg(not(feature = "runtime-benchmarks"))]
@@ -103,6 +105,8 @@ impl snowbridge_pallet_system_frontend::Config for Runtime {
 	type BridgeHubLocation = BridgeHubLocation;
 	type UniversalLocation = UniversalLocation;
 	type PalletLocation = SystemFrontendPalletLocation;
+	type Swap = AssetConversion;
+	type ForeignToken = ForeignAssets;
 	type BackendWeightInfo = ();
 }
 
