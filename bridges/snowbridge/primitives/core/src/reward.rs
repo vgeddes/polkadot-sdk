@@ -5,6 +5,7 @@ extern crate alloc;
 
 use crate::reward::RewardPaymentError::{ChargeFeesFailure, XcmSendFailure};
 use bp_relayers::PaymentProcedure;
+use codec::DecodeWithMemTracking;
 use frame_support::dispatch::GetDispatchInfo;
 use scale_info::TypeInfo;
 use sp_runtime::{
@@ -17,6 +18,19 @@ use xcm::{
 	opaque::latest::prelude::Xcm,
 	prelude::{ExecuteXcm, Junction::*, Location, SendXcm, *},
 };
+
+#[derive(Debug, Clone, PartialEq, Encode, Decode, DecodeWithMemTracking, TypeInfo)]
+pub enum MessageId {
+	/// Message from Ethereum
+	Inbound(u64),
+	/// Message to Ethereum
+	Outbound(u64),
+}
+
+pub trait AddTip {
+	/// Add a relayer reward tip to a pallet.
+	fn add_tip(nonce: u64, amount: u128);
+}
 
 #[derive(Debug, Encode, Decode)]
 pub enum RewardPaymentError {

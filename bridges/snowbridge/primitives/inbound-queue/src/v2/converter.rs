@@ -166,9 +166,9 @@ where
 		Ok(prepared_message)
 	}
 
-    /// Construct the remote XCM needed to create a new asset in the `ForeignAssets` pallet
-    /// on AssetHub (Polkadot or Kusama).
-    fn make_create_asset_xcm(
+	/// Construct the remote XCM needed to create a new asset in the `ForeignAssets` pallet
+	/// on AssetHub (Polkadot or Kusama).
+	fn make_create_asset_xcm(
 		token: &H160,
 		network: u8,
 		eth_value: u128,

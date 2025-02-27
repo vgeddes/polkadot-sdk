@@ -26,6 +26,7 @@ use snowbridge_outbound_queue_primitives::v2::{ContractCall, DeliveryReceipt};
 use snowbridge_pallet_outbound_queue_v2::Error;
 use xcm::v5::AssetTransferFilter;
 use xcm_executor::traits::ConvertLocation;
+use snowbridge_core::reward::MessageId;
 
 #[derive(Encode, Decode, Debug, PartialEq, Clone, TypeInfo)]
 pub enum EthereumSystemFrontendCall {
@@ -168,6 +169,27 @@ pub fn register_relay_token_from_asset_hub_user_origin() {
 		assert_expected_events!(
 			BridgeHubWestend,
 			vec![RuntimeEvent::EthereumOutboundQueueV2(snowbridge_pallet_outbound_queue_v2::Event::MessageQueued{ .. }) => {},]
+		);
+	});
+}
+
+#[test]
+pub fn add_tip_from_asset_hub_user_origin() {
+	fund_on_bh();
+	register_assets_on_ah();
+	fund_on_ah();
+	set_up_eth_and_dot_pool();
+
+	let dot = Location::new(1, Here);
+	AssetHubWestend::execute_with(|| {
+		type RuntimeOrigin = <AssetHubWestend as Chain>::RuntimeOrigin;
+
+		assert_ok!(
+			<AssetHubWestend as AssetHubWestendPallet>::SnowbridgeSystemFrontend::add_tip(
+				RuntimeOrigin::signed(AssetHubWestendSender::get()),
+				MessageId::Inbound(1),
+				xcm::prelude::Asset::from((dot, 1_000_000_000u128)),
+			)
 		);
 	});
 }

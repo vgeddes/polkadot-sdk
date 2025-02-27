@@ -58,6 +58,7 @@ use sp_std::prelude::*;
 use xcm::prelude::{ExecuteXcm, Junction::*, Location, SendXcm, *};
 
 use bp_relayers::RewardLedger;
+use snowbridge_core::reward::AddTip;
 #[cfg(feature = "runtime-benchmarks")]
 use {snowbridge_beacon_primitives::BeaconHeader, sp_core::H256};
 
@@ -208,6 +209,10 @@ pub mod pallet {
 	#[pallet::storage]
 	pub type OperatingMode<T: Config> = StorageValue<_, BasicOperatingMode, ValueQuery>;
 
+	/// Keep track of tips added for a message as an additional relayer incentivization.
+	#[pallet::storage]
+	pub type Tips<T: Config> = StorageMap<_, Twox64Concat, u64, u128, ValueQuery>;
+
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
 		/// Submit an inbound message originating from the Gateway contract on Ethereum
@@ -261,12 +266,11 @@ pub mod pallet {
 					Error::<T>::from(error)
 				})?;
 
-			// Pay relayer reward
-			T::RewardPayment::register_reward(
-				&relayer,
-				T::DefaultRewardKind::get(),
-				message.relayer_fee,
-			);
+			// Get the tip and remove it from storage, if a tip was added.
+			let tip_amount = Tips::<T>::take(message.nonce);
+			let total_reward = message.relayer_fee.saturating_add(tip_amount);
+
+			T::RewardPayment::register_reward(&relayer, T::DefaultRewardKind::get(), total_reward);
 
 			// Mark message as received
 			Nonce::<T>::set(message.nonce.into());
@@ -299,6 +303,14 @@ pub mod pallet {
 			})?;
 			Self::deposit_event(Event::FeesPaid { paying: fee_payer, fees: fee });
 			T::XcmSender::deliver(ticket)
+		}
+	}
+
+	impl<T: Config> AddTip for Pallet<T> {
+		fn add_tip(nonce: u64, amount: u128) {
+			Tips::<T>::mutate(nonce, |current_tip| {
+				*current_tip = current_tip.saturating_add(amount);
+			});
 		}
 	}
 }
