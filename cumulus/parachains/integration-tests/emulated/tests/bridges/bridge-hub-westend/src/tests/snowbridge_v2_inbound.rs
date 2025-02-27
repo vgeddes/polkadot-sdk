@@ -58,8 +58,10 @@ const CHAIN_ID: u64 = 11155111u64;
 fn register_token_on_rococo_v2() {
 	let relayer = BridgeHubWestendSender::get();
 	let receiver = AssetHubWestendReceiver::get();
+	let ahs = AssetHubWestendReceiver::get();
 
 	BridgeHubWestend::fund_accounts(vec![(relayer.clone(), INITIAL_FUND)]);
+	BridgeHubWestend::fund_para_sovereign(AssetHubWestend::para_id(), INITIAL_FUND);
 	AssetHubWestend::fund_accounts(vec![(snowbridge_sovereign(), INITIAL_FUND)]);
 
 	let sov_ahw_on_ahr = AssetHubRococo::sovereign_account_of_parachain_on_other_global_consensus(
@@ -85,6 +87,8 @@ fn register_token_on_rococo_v2() {
 	let eth_asset_value = 9_000_000_000_000u128;
 	let asset_deposit: xcm::prelude::Asset = (eth_location(), eth_asset_value).into();
 
+	BridgeHubWestend::force_xcm_version(asset_hub_westend_location(), XCM_VERSION);
+	BridgeHubWestend::force_xcm_version(asset_hub_rococo_location(), XCM_VERSION);
 	AssetHubWestend::force_xcm_version(asset_hub_rococo_location(), XCM_VERSION);
 
 	BridgeHubWestend::execute_with(|| {
