@@ -59,6 +59,7 @@ use xcm::prelude::{ExecuteXcm, Junction::*, Location, SendXcm, *};
 
 use bp_relayers::RewardLedger;
 use snowbridge_core::reward::AddTip;
+use snowbridge_core::reward::AddTipError;
 #[cfg(feature = "runtime-benchmarks")]
 use {snowbridge_beacon_primitives::BeaconHeader, sp_core::H256};
 
@@ -213,6 +214,10 @@ pub mod pallet {
 	#[pallet::storage]
 	pub type Tips<T: Config> = StorageMap<_, Twox64Concat, u64, u128, ValueQuery>;
 
+	/// Relayer reward tips that were added but the nonce was already consumed.
+	#[pallet::storage]
+	pub type LostTips<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, u128, ValueQuery>;
+
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
 		/// Submit an inbound message originating from the Gateway contract on Ethereum
@@ -306,11 +311,25 @@ pub mod pallet {
 		}
 	}
 
-	impl<T: Config> AddTip for Pallet<T> {
-		fn add_tip(nonce: u64, amount: u128) {
-			Tips::<T>::mutate(nonce, |current_tip| {
-				*current_tip = current_tip.saturating_add(amount);
+	impl<T: Config> AddTip<AccountIdOf<T>> for Pallet<T> {
+		fn add_tip(sender: AccountIdOf<T>, nonce: u64, amount: u128) -> Result<(), AddTipError> {
+			let mut result= Ok(());
+
+			Tips::<T>::mutate_exists(nonce, |maybe_tip| {
+				match maybe_tip {
+					None => {
+						// Nonce not found
+						LostTips::<T>::insert(sender, amount);
+						result = Err(AddTipError::NonceConsumed);
+					},
+					Some(tip) => {
+						// Nonce found; update the tip amount
+						*tip = tip.saturating_add(amount);
+					},
+				}
 			});
+
+			result
 		}
 	}
 }

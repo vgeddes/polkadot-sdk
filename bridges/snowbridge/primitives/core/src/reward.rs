@@ -27,9 +27,14 @@ pub enum MessageId {
 	Outbound(u64),
 }
 
-pub trait AddTip {
+#[derive(Debug, Encode, Decode)]
+pub enum AddTipError {
+	NonceConsumed,
+}
+
+pub trait AddTip<AccountId> {
 	/// Add a relayer reward tip to a pallet.
-	fn add_tip(nonce: u64, amount: u128);
+	fn add_tip(sender: AccountId, nonce: u64, amount: u128) -> Result<(), AddTipError>;
 }
 
 #[derive(Debug, Encode, Decode)]

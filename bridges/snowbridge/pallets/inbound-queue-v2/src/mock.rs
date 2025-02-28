@@ -22,7 +22,15 @@ use sp_runtime::{
 };
 use sp_std::{convert::From, default::Default, marker::PhantomData};
 use xcm::{latest::SendXcm, opaque::latest::WESTEND_GENESIS_HASH, prelude::*};
+use codec::Decode;
+use codec::DecodeWithMemTracking;
+use codec::MaxEncodedLen;
+use scale_info::TypeInfo;
 type Block = frame_system::mocking::MockBlock<Test>;
+use bp_relayers::RewardsAccountParams;
+use bp_relayers::PaymentProcedure;
+use sp_runtime::DispatchResult;
+use bp_relayers::RewardsAccountOwner;
 
 frame_support::construct_runtime!(
 	pub enum Test
@@ -31,6 +39,7 @@ frame_support::construct_runtime!(
 		Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
 		EthereumBeaconClient: snowbridge_pallet_ethereum_client::{Pallet, Call, Storage, Event<T>},
 		InboundQueue: inbound_queue_v2::{Pallet, Call, Storage, Event<T>},
+		BridgeRelayers: pallet_bridge_relayers,
 	}
 );
 
@@ -39,12 +48,39 @@ pub type AccountId = <<Signature as Verify>::Signer as IdentifyAccount>::Account
 
 type Balance = u128;
 
+#[derive(
+Clone,
+Copy,
+Debug,
+Decode,
+DecodeWithMemTracking,
+Encode,
+Eq,
+MaxEncodedLen,
+PartialEq,
+TypeInfo,
+)]
+pub enum BridgeReward {
+	/// Rewards for Snowbridge.
+	Snowbridge,
+}
+
 #[derive_impl(frame_system::config_preludes::TestDefaultConfig)]
 impl frame_system::Config for Test {
 	type AccountId = AccountId;
 	type Lookup = IdentityLookup<Self::AccountId>;
 	type AccountData = pallet_balances::AccountData<u128>;
 	type Block = Block;
+}
+
+impl pallet_bridge_relayers::Config for Test {
+	type RuntimeEvent = RuntimeEvent;
+	type RewardBalance = u128;
+	type Reward = RewardsAccountParams<u64>;
+	type PaymentProcedure = MockPaymentProcedure;
+	type StakeAndSlash = ();
+	type Balance = Balance;
+	type WeightInfo = ();
 }
 
 parameter_types! {
@@ -92,6 +128,34 @@ impl snowbridge_pallet_ethereum_client::Config for Test {
 	type ForkVersions = ChainForkVersions;
 	type FreeHeadersInterval = ConstU32<32>;
 	type WeightInfo = ();
+}
+
+pub struct MockPaymentProcedure;
+
+// Provide a no-op or mock implementation for the required trait
+impl PaymentProcedure<sp_runtime::AccountId32, RewardsAccountParams<u64>, u128>
+for MockPaymentProcedure
+{
+	type Error = DispatchResult;
+	type Beneficiary = Location;
+	fn pay_reward(
+		_who: &sp_runtime::AccountId32,
+		_reward_params: bp_relayers::RewardsAccountParams<u64>,
+		_reward_balance: u128,
+		_beneficiary: Self::Beneficiary
+	) -> Result<(), Self::Error> {
+		Ok(())
+	}
+}
+
+impl From<BridgeReward> for RewardsAccountParams<u64> {
+	fn from(_bridge_reward: BridgeReward) -> Self {
+		RewardsAccountParams::new(
+			1,
+			[0; 4],
+			RewardsAccountOwner::ThisChain,
+		)
+	}
 }
 
 // Mock verifier
@@ -190,6 +254,7 @@ parameter_types! {
 	pub const InitialFund: u128 = 1_000_000_000_000;
 	pub const CreateAssetCall: [u8;2] = [53, 0];
 	pub const CreateAssetDeposit: u128 = 10_000_000_000u128;
+	pub const SnowbridgeReward: BridgeReward = BridgeReward::Snowbridge;
 }
 
 impl inbound_queue_v2::Config for Test {
@@ -197,7 +262,6 @@ impl inbound_queue_v2::Config for Test {
 	type Verifier = MockVerifier;
 	type XcmSender = MockXcmSender;
 	type XcmExecutor = MockXcmExecutor;
-	type RewardPayment = ();
 	type EthereumNetwork = EthereumNetwork;
 	type GatewayAddress = GatewayAddress;
 	type AssetHubParaId = ConstU32<1000>;
@@ -218,6 +282,10 @@ impl inbound_queue_v2::Config for Test {
 	type WeightToFee = IdentityFee<u128>;
 	type Token = Balances;
 	type AccountToLocation = MockAccountLocationConverter<AccountId>;
+	type RewardKind = BridgeReward;
+
+	type DefaultRewardKind = SnowbridgeReward;
+	type RewardPayment = BridgeRelayers;
 }
 
 pub fn setup() {
@@ -318,6 +386,7 @@ pub mod mock_xcm_send_failure {
 			Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
 			EthereumBeaconClient: snowbridge_pallet_ethereum_client::{Pallet, Call, Storage, Event<T>},
 			InboundQueue: inbound_queue_v2::{Pallet, Call, Storage, Event<T>},
+			BridgeRelayers: pallet_bridge_relayers,
 		}
 	);
 
@@ -336,12 +405,21 @@ pub mod mock_xcm_send_failure {
 		type AccountStore = System;
 	}
 
+	impl pallet_bridge_relayers::Config for TestXcmSendFailure {
+		type RuntimeEvent = RuntimeEvent;
+		type RewardBalance = u128;
+		type Reward = RewardsAccountParams<u64>;
+		type PaymentProcedure = MockPaymentProcedure;
+		type StakeAndSlash = ();
+		type Balance = Balance;
+		type WeightInfo = ();
+	}
+
 	impl inbound_queue_v2::Config for TestXcmSendFailure {
 		type RuntimeEvent = RuntimeEvent;
 		type Verifier = MockVerifier;
 		type XcmSender = MockXcmFailureSender;
 		type XcmExecutor = MockXcmExecutor;
-		type RewardPayment = ();
 		type EthereumNetwork = EthereumNetwork;
 		type GatewayAddress = GatewayAddress;
 		type AssetHubParaId = ConstU32<1000>;
@@ -362,6 +440,10 @@ pub mod mock_xcm_send_failure {
 		type WeightToFee = IdentityFee<u128>;
 		type Token = Balances;
 		type AccountToLocation = MockAccountLocationConverter<AccountId>;
+		type RewardKind = BridgeReward;
+
+		type DefaultRewardKind = SnowbridgeReward;
+		type RewardPayment = BridgeRelayers;
 	}
 
 	impl snowbridge_pallet_ethereum_client::Config for TestXcmSendFailure {
@@ -420,6 +502,7 @@ pub mod mock_xcm_validate_failure {
 			Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
 			EthereumBeaconClient: snowbridge_pallet_ethereum_client::{Pallet, Call, Storage, Event<T>},
 			InboundQueue: inbound_queue_v2::{Pallet, Call, Storage, Event<T>},
+			BridgeRelayers: pallet_bridge_relayers,
 		}
 	);
 
@@ -438,12 +521,21 @@ pub mod mock_xcm_validate_failure {
 		type AccountStore = System;
 	}
 
+	impl pallet_bridge_relayers::Config for Test {
+		type RuntimeEvent = RuntimeEvent;
+		type RewardBalance = u128;
+		type Reward = RewardsAccountParams<u64>;
+		type PaymentProcedure = MockPaymentProcedure;
+		type StakeAndSlash = ();
+		type Balance = Balance;
+		type WeightInfo = ();
+	}
+
 	impl inbound_queue_v2::Config for Test {
 		type RuntimeEvent = RuntimeEvent;
 		type Verifier = MockVerifier;
 		type XcmSender = MockXcmFailureValidate;
 		type XcmExecutor = MockXcmExecutor;
-		type RewardPayment = ();
 		type EthereumNetwork = EthereumNetwork;
 		type GatewayAddress = GatewayAddress;
 		type AssetHubParaId = ConstU32<1000>;
@@ -464,6 +556,10 @@ pub mod mock_xcm_validate_failure {
 		type WeightToFee = IdentityFee<u128>;
 		type Token = Balances;
 		type AccountToLocation = MockAccountLocationConverter<AccountId>;
+		type RewardKind = BridgeReward;
+
+		type DefaultRewardKind = SnowbridgeReward;
+		type RewardPayment = BridgeRelayers;
 	}
 
 	impl snowbridge_pallet_ethereum_client::Config for Test {
@@ -514,6 +610,7 @@ pub mod mock_charge_fees_failure {
 			Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
 			EthereumBeaconClient: snowbridge_pallet_ethereum_client::{Pallet, Call, Storage, Event<T>},
 			InboundQueue: inbound_queue_v2::{Pallet, Call, Storage, Event<T>},
+			BridgeRelayers: pallet_bridge_relayers,
 		}
 	);
 
@@ -523,6 +620,16 @@ pub mod mock_charge_fees_failure {
 		type Lookup = IdentityLookup<Self::AccountId>;
 		type AccountData = pallet_balances::AccountData<u128>;
 		type Block = Block;
+	}
+
+	impl pallet_bridge_relayers::Config for Test {
+		type RuntimeEvent = RuntimeEvent;
+		type RewardBalance = u128;
+		type Reward = RewardsAccountParams<u64>;
+		type PaymentProcedure = MockPaymentProcedure;
+		type StakeAndSlash = ();
+		type Balance = Balance;
+		type WeightInfo = ();
 	}
 
 	#[derive_impl(pallet_balances::config_preludes::TestDefaultConfig)]
@@ -537,7 +644,6 @@ pub mod mock_charge_fees_failure {
 		type Verifier = MockVerifier;
 		type XcmSender = MockXcmSender;
 		type XcmExecutor = MockXcmChargeFeesFailure;
-		type RewardPayment = ();
 		type EthereumNetwork = EthereumNetwork;
 		type GatewayAddress = GatewayAddress;
 		type AssetHubParaId = ConstU32<1000>;
@@ -558,6 +664,10 @@ pub mod mock_charge_fees_failure {
 		type WeightToFee = IdentityFee<u128>;
 		type Token = Balances;
 		type AccountToLocation = MockAccountLocationConverter<AccountId>;
+		type RewardKind = BridgeReward;
+
+		type DefaultRewardKind = SnowbridgeReward;
+		type RewardPayment = BridgeRelayers;
 	}
 
 	impl snowbridge_pallet_ethereum_client::Config for Test {

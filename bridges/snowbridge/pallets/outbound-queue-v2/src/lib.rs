@@ -229,6 +229,11 @@ pub mod pallet {
 	#[pallet::storage]
 	pub type Nonce<T: Config> = StorageValue<_, u64, ValueQuery>;
 
+	/// Relayer reward tips that were added but could not be added to the pending orders,
+	/// perhaps because the nonce was already processed.
+	#[pallet::storage]
+	pub type LostTips<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, u128, ValueQuery>;
+
 	/// Pending orders to relay
 	#[pallet::storage]
 	pub type PendingOrders<T: Config> =
@@ -408,12 +413,27 @@ pub mod pallet {
 	}
 
 	impl<T: Config> AddTip for Pallet<T> {
-		fn add_tip(nonce: u64, amount: u128) {
+		fn add_tip(nonce: u64, amount: u128) -> Result<(), AddTipError> {
+			let mut result = Ok(());
+
 			PendingOrders::<T>::mutate_exists(nonce, |maybe_order| {
-				if let Some(order) = maybe_order.as_mut() {
-					order.fee = order.fee.saturating_add(amount);
+				match maybe_order {
+					None => {
+						// Store tip in LostTips if the nonce isn't found
+						LostTips::<T>::mutate(&who, |existing_tip| {
+							*existing_tip = existing_tip.saturating_add(amount);
+						});
+
+						result = Err(Error::<T>::NonceConsumed.into());
+					},
+					Some(order) => {
+						// Nonce exists, so just add the tip to the fee
+						order.fee = order.fee.saturating_add(amount);
+					},
 				}
 			});
+
+			result
 		}
 	}
 }
