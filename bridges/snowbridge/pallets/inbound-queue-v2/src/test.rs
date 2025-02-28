@@ -277,3 +277,20 @@ fn test_xcm_charge_fees_failure() {
 		);
 	});
 }
+
+#[test]
+fn test_register_token() {
+	new_tester().execute_with(|| {
+		let relayer: AccountId = Keyring::Bob.into();
+		let origin = RuntimeOrigin::signed(relayer);
+		let event = EventProof {
+			event_log: mock_event_log_v2(),
+			proof: Proof {
+				receipt_proof: Default::default(),
+				execution_proof: mock_execution_proof(),
+			},
+		};
+
+		assert_ok!(InboundQueue::submit(origin, Box::new(event)));
+	});
+}
