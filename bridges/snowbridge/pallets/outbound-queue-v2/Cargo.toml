@@ -43,6 +43,8 @@ xcm-builder = { workspace = true }
 xcm-executor = { workspace = true }
 
 [dev-dependencies]
+pallet-balances = { workspace = true }
+pallet-bridge-relayers = { workspace = true }
 pallet-message-queue = { workspace = true }
 sp-keyring = { workspace = true, default-features = true }
 
@@ -57,6 +59,8 @@ std = [
 	"frame-benchmarking/std",
 	"frame-support/std",
 	"frame-system/std",
+	"pallet-balances/std",
+	"pallet-bridge-relayers/std",
 	"pallet-message-queue/std",
 	"scale-info/std",
 	"serde/std",

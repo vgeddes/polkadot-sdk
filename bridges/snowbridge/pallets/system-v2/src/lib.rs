@@ -34,7 +34,13 @@ pub use weights::*;
 
 use frame_support::{pallet_prelude::*, traits::EnsureOrigin};
 use frame_system::pallet_prelude::*;
-use snowbridge_core::{AgentIdOf as LocationHashOf, AssetMetadata, TokenId, TokenIdOf};
+use snowbridge_core::{
+	reward::{
+		AddTip, AddTipError, MessageId,
+		MessageId::{Inbound, Outbound},
+	},
+	AgentIdOf as LocationHashOf, AssetMetadata, TokenId, TokenIdOf,
+};
 use snowbridge_outbound_queue_primitives::{
 	v2::{Command, Initializer, Message, SendMessage},
 	OperatingMode, SendError,
@@ -45,10 +51,6 @@ use sp_runtime::traits::MaybeEquivalence;
 use sp_std::prelude::*;
 use xcm::prelude::*;
 use xcm_executor::traits::ConvertLocation;
-use snowbridge_core::reward::AddTip;
-use snowbridge_core::reward::MessageId::Inbound;
-use snowbridge_core::reward::MessageId::Outbound;
-use snowbridge_core::reward::MessageId;
 
 use snowbridge_pallet_system::{ForeignToNativeId, NativeToForeignId};
 
@@ -119,7 +121,12 @@ pub mod pallet {
 		InvalidLocation,
 		Send(SendError),
 		InvalidUpgradeParameters,
+		TipError(AddTipError),
 	}
+
+	/// Relayer reward tips that were added but the nonce was already consumed.
+	#[pallet::storage]
+	pub type LostTips<T: Config> = StorageMap<_, Twox64Concat, AccountIdOf<T>, u128, ValueQuery>;
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
@@ -234,17 +241,26 @@ pub mod pallet {
 		#[pallet::weight(<T as pallet::Config>::WeightInfo::add_tip())]
 		pub fn add_tip(
 			origin: OriginFor<T>,
+			sender: AccountIdOf<T>,
 			message_id: MessageId,
-			amount: u128
+			amount: u128,
 		) -> DispatchResult {
 			T::FrontendOrigin::ensure_origin(origin)?;
 
-			match message_id {
+			let result = match message_id {
 				Inbound(nonce) => <T as pallet::Config>::InboundQueue::add_tip(nonce, amount),
 				Outbound(nonce) => <T as pallet::Config>::OutboundQueue::add_tip(nonce, amount),
-			}
+			};
 
-			Ok(())
+			match result {
+				Ok(()) => Ok(()),
+				Err(e) => {
+					LostTips::<T>::mutate(&sender, |lost_tip| {
+						*lost_tip = lost_tip.saturating_add(amount);
+					});
+					return Err(Error::<T>::TipError(e).into());
+				},
+			}
 		}
 	}
 

@@ -6,7 +6,7 @@ extern crate alloc;
 use crate::reward::RewardPaymentError::{ChargeFeesFailure, XcmSendFailure};
 use bp_relayers::PaymentProcedure;
 use codec::DecodeWithMemTracking;
-use frame_support::dispatch::GetDispatchInfo;
+use frame_support::{dispatch::GetDispatchInfo, PalletError};
 use scale_info::TypeInfo;
 use sp_runtime::{
 	codec::{Decode, Encode},
@@ -27,14 +27,14 @@ pub enum MessageId {
 	Outbound(u64),
 }
 
-#[derive(Debug, Encode, Decode)]
+#[derive(Debug, Encode, DecodeWithMemTracking, Decode, TypeInfo, PalletError)]
 pub enum AddTipError {
 	NonceConsumed,
 }
 
-pub trait AddTip<AccountId> {
+pub trait AddTip {
 	/// Add a relayer reward tip to a pallet.
-	fn add_tip(sender: AccountId, nonce: u64, amount: u128) -> Result<(), AddTipError>;
+	fn add_tip(nonce: u64, amount: u128) -> Result<(), AddTipError>;
 }
 
 #[derive(Debug, Encode, Decode)]

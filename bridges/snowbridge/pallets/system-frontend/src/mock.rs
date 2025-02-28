@@ -3,8 +3,8 @@
 use crate as snowbridge_system_frontend;
 use crate::mock::pallet_xcm_origin::EnsureXcm;
 
-use core::cell::RefCell;
 use codec::Encode;
+use core::cell::RefCell;
 use frame_support::{
 	derive_impl, parameter_types,
 	traits::{AsEnsureOriginWithArg, Everything},
@@ -17,7 +17,7 @@ use sp_runtime::{
 use xcm::prelude::*;
 use xcm_executor::{
 	traits::{FeeManager, FeeReason, TransactAsset},
-	AssetsInHolding
+	AssetsInHolding,
 };
 
 #[cfg(feature = "runtime-benchmarks")]
@@ -46,7 +46,17 @@ mod pallet_xcm_origin {
 
 	// Insert this custom Origin into the aggregate RuntimeOrigin
 	#[pallet::origin]
-	#[derive(PartialEq, Eq, Clone, Encode, Decode, DecodeWithMemTracking, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+	#[derive(
+		PartialEq,
+		Eq,
+		Clone,
+		Encode,
+		Decode,
+		DecodeWithMemTracking,
+		RuntimeDebug,
+		TypeInfo,
+		MaxEncodedLen,
+	)]
 	pub struct Origin(pub Location);
 
 	impl From<Location> for Origin {
@@ -141,13 +151,8 @@ pub fn set_fee_waiver(waived: Vec<FeeReason>) {
 
 #[allow(dead_code)]
 pub fn set_sender_override(
-	validate: fn(
-		&mut Option<Location>,
-		&mut Option<Xcm<()>>,
-	) -> SendResult<Xcm<()>>,
-	deliver: fn(
-		Xcm<()>,
-	) -> Result<XcmHash, SendError>,
+	validate: fn(&mut Option<Location>, &mut Option<Xcm<()>>) -> SendResult<Xcm<()>>,
+	deliver: fn(Xcm<()>) -> Result<XcmHash, SendError>,
 ) {
 	SENDER_OVERRIDE.with(|x| x.replace(Some((validate, deliver))));
 }
@@ -158,9 +163,7 @@ pub fn clear_sender_override() {
 }
 
 #[allow(dead_code)]
-pub fn set_charge_fees_override(
-	charge_fees: fn(Location, Assets) -> xcm::latest::Result
-) {
+pub fn set_charge_fees_override(charge_fees: fn(Location, Assets) -> xcm::latest::Result) {
 	CHARGE_FEES_OVERRIDE.with(|x| x.replace(Some(charge_fees)));
 }
 
@@ -168,7 +171,6 @@ pub fn set_charge_fees_override(
 pub fn clear_charge_fees_override() {
 	CHARGE_FEES_OVERRIDE.with(|x| x.replace(None));
 }
-
 
 // Mock XCM sender that always succeeds
 pub struct MockXcmSender;

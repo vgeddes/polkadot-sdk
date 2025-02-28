@@ -26,6 +26,7 @@ use xcm::{opaque::latest::WESTEND_GENESIS_HASH, prelude::*};
 use crate::mock::pallet_xcm_origin::EnsureXcm;
 #[cfg(feature = "runtime-benchmarks")]
 use crate::BenchmarkHelper;
+use snowbridge_core::reward::{AddTip, AddTipError};
 
 type Block = frame_system::mocking::MockBlock<Test>;
 type Balance = u128;
@@ -53,7 +54,17 @@ mod pallet_xcm_origin {
 
 	// Insert this custom Origin into the aggregate RuntimeOrigin
 	#[pallet::origin]
-	#[derive(PartialEq, Eq, Clone, Encode, Decode, DecodeWithMemTracking, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+	#[derive(
+		PartialEq,
+		Eq,
+		Clone,
+		Encode,
+		Decode,
+		DecodeWithMemTracking,
+		RuntimeDebug,
+		TypeInfo,
+		MaxEncodedLen,
+	)]
 	pub struct Origin(pub Location);
 
 	impl From<Location> for Origin {
@@ -144,6 +155,20 @@ impl SendMessage for MockOkOutboundQueue {
 	}
 }
 
+impl AddTip for MockOkOutboundQueue {
+	fn add_tip(_nonce: u64, _amount: u128) -> Result<(), AddTipError> {
+		Ok(())
+	}
+}
+
+pub struct MockOkInboundQueue;
+
+impl AddTip for MockOkInboundQueue {
+	fn add_tip(_nonce: u64, _amount: u128) -> Result<(), AddTipError> {
+		Ok(())
+	}
+}
+
 impl SendMessageFeeProvider for MockOkOutboundQueue {
 	type Balance = u128;
 
@@ -221,6 +246,7 @@ impl Contains<Location> for AllowFromAssetHub {
 impl crate::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type OutboundQueue = MockOkOutboundQueue;
+	type InboundQueue = MockOkInboundQueue;
 	type FrontendOrigin = EnsureXcm<AllowFromAssetHub>;
 	type GovernanceOrigin = EnsureRootWithSuccess<AccountId, RootLocation>;
 	type WeightInfo = ();

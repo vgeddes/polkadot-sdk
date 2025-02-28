@@ -81,7 +81,10 @@ use frame_support::{
 	traits::{tokens::Balance, EnqueueMessage, Get, ProcessMessageError},
 	weights::{Weight, WeightToFee},
 };
-use snowbridge_core::{reward::AddTip, BasicOperatingMode, TokenId};
+use snowbridge_core::{
+	reward::{AddTip, AddTipError},
+	BasicOperatingMode, TokenId,
+};
 use snowbridge_merkle_tree::merkle_root;
 use snowbridge_outbound_queue_primitives::{
 	v2::{
@@ -99,6 +102,8 @@ use sp_std::prelude::*;
 pub use types::{PendingOrder, ProcessMessageOriginOf};
 pub use weights::WeightInfo;
 use xcm::latest::{Location, NetworkId};
+
+pub type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
 type DeliveryReceiptOf<T> = DeliveryReceipt<<T as frame_system::Config>::AccountId>;
 
 pub use pallet::*;
@@ -228,11 +233,6 @@ pub mod pallet {
 	/// The current nonce for the messages
 	#[pallet::storage]
 	pub type Nonce<T: Config> = StorageValue<_, u64, ValueQuery>;
-
-	/// Relayer reward tips that were added but could not be added to the pending orders,
-	/// perhaps because the nonce was already processed.
-	#[pallet::storage]
-	pub type LostTips<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, u128, ValueQuery>;
 
 	/// Pending orders to relay
 	#[pallet::storage]
@@ -414,26 +414,15 @@ pub mod pallet {
 
 	impl<T: Config> AddTip for Pallet<T> {
 		fn add_tip(nonce: u64, amount: u128) -> Result<(), AddTipError> {
-			let mut result = Ok(());
-
-			PendingOrders::<T>::mutate_exists(nonce, |maybe_order| {
+			PendingOrders::<T>::try_mutate_exists(nonce, |maybe_order| -> Result<(), AddTipError> {
 				match maybe_order {
-					None => {
-						// Store tip in LostTips if the nonce isn't found
-						LostTips::<T>::mutate(&who, |existing_tip| {
-							*existing_tip = existing_tip.saturating_add(amount);
-						});
-
-						result = Err(Error::<T>::NonceConsumed.into());
-					},
 					Some(order) => {
-						// Nonce exists, so just add the tip to the fee
 						order.fee = order.fee.saturating_add(amount);
+						Ok(())
 					},
+					None => Err(AddTipError::NonceConsumed),
 				}
-			});
-
-			result
+			})
 		}
 	}
 }

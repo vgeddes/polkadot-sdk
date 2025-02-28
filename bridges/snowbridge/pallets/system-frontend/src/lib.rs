@@ -24,19 +24,25 @@ pub use weights::*;
 pub mod backend_weights;
 pub use backend_weights::*;
 
-use frame_support::{pallet_prelude::*, traits::EnsureOriginWithArg};
+use frame_support::{
+	pallet_prelude::*,
+	traits::{
+		fungibles::{Inspect, Mutate},
+		EnsureOriginWithArg,
+	},
+};
 use frame_system::pallet_prelude::*;
-use snowbridge_core::{operating_mode::ExportPausedQuery, AssetMetadata, BasicOperatingMode};
+use pallet_asset_conversion::Swap;
+use snowbridge_core::{
+	burn_for_teleport, operating_mode::ExportPausedQuery, reward::MessageId, AssetMetadata,
+	BasicOperatingMode,
+};
 use sp_std::prelude::*;
 use xcm::{
 	latest::{validate_send, XcmHash},
 	prelude::*,
 };
 use xcm_executor::traits::{FeeManager, FeeReason, TransactAsset};
-use snowbridge_core::reward::MessageId;
-use pallet_asset_conversion::Swap;
-use frame_support::traits::fungibles::Inspect;
-use frame_support::traits::fungibles::Mutate;
 
 #[cfg(feature = "runtime-benchmarks")]
 use frame_support::traits::OriginTrait;
@@ -49,14 +55,14 @@ pub const LOG_TARGET: &str = "snowbridge-system-frontend";
 /// Call indices within BridgeHub runtime for dispatchables within `snowbridge-pallet-system-v2`
 #[allow(clippy::large_enum_variant)]
 #[derive(Encode, Decode, Debug, PartialEq, Clone, TypeInfo)]
-pub enum BridgeHubRuntime {
+pub enum BridgeHubRuntime<T: frame_system::Config> {
 	#[codec(index = 90)]
-	EthereumSystem(EthereumSystemCall),
+	EthereumSystem(EthereumSystemCall<T>),
 }
 
 /// Call indices for dispatchables within `snowbridge-pallet-system-v2`
 #[derive(Encode, Decode, Debug, PartialEq, Clone, TypeInfo)]
-pub enum EthereumSystemCall {
+pub enum EthereumSystemCall<T: frame_system::Config> {
 	#[codec(index = 0)]
 	RegisterToken {
 		sender: Box<VersionedLocation>,
@@ -64,10 +70,7 @@ pub enum EthereumSystemCall {
 		metadata: AssetMetadata,
 	},
 	#[codec(index = 5)]
-	AddTip {
-		message_id: MessageId,
-		amount: u128,
-	},
+	AddTip { sender: AccountIdOf<T>, message_id: MessageId, amount: u128 },
 }
 
 #[cfg(feature = "runtime-benchmarks")]
@@ -102,7 +105,7 @@ pub mod pallet {
 		type AssetTransactor: TransactAsset;
 		/// Message relayers are rewarded with this asset
 		type ForeignToken: Inspect<Self::AccountId, AssetId = Location, Balance = u128>
-		+ Mutate<Self::AccountId, AssetId = Location, Balance = u128>;
+			+ Mutate<Self::AccountId, AssetId = Location, Balance = u128>;
 
 		/// To charge XCM delivery fees
 		type XcmExecutor: ExecuteXcm<Self::RuntimeCall> + FeeManager;
@@ -174,6 +177,7 @@ pub mod pallet {
 		/// Unable to withdraw asset.
 		WithdrawError,
 		InvalidAccount,
+		SwapError,
 	}
 
 	impl<T: Config> From<SendError> for Error<T> {
@@ -254,48 +258,35 @@ pub mod pallet {
 			T::WeightInfo::add_tip()
 				.saturating_add(T::BackendWeightInfo::transact_add_tip())
 		)]
-		pub fn add_tip(origin: OriginFor<T>, message_id: MessageId, asset: Asset) -> DispatchResult {
+		pub fn add_tip(
+			origin: OriginFor<T>,
+			message_id: MessageId,
+			asset: Asset,
+		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
 
 			let ether_location = T::EthereumLocation::get();
 			let (tip_asset_location, tip_amount) = match asset {
-				Asset {
-					id: AssetId(ref loc),
-					fun: Fungibility::Fungible(amount),
-				} => (loc, amount),
+				Asset { id: AssetId(ref loc), fun: Fungibility::Fungible(amount) } => (loc, amount),
 				_ => return Err(Error::<T>::UnsupportedAsset.into()),
 			};
 
-			// Swap tip asset to ether
-			let swap_path = vec![(*tip_asset_location).clone(), ether_location.clone()];
-			let who_location = Self::account_to_location(who.clone())?;
-
-			let balance_before = T::ForeignToken::balance(ether_location.clone(), &who);
-			T::Swap::swap_exact_tokens_for_tokens(
-				who.clone(),
-				swap_path,
-				tip_amount,
-				None,
-				who.clone(),
-				true,
-			)?;
-			let balance_after = T::ForeignToken::balance(ether_location.clone(), &who);
-			let ether_gained = balance_after.saturating_sub(balance_before);
-
-			// Burn the ether
-			let ether_asset = Asset::from((ether_location.clone(), ether_gained));
-			let xcm_context = XcmContext {
-				origin: None,
-				message_id: Default::default(),
-				topic: None,
+			let ether_gained = if *tip_asset_location != ether_location {
+				Self::swap_and_burn(
+					who.clone(),
+					tip_asset_location.clone(),
+					ether_location,
+					tip_amount,
+				)
+				.map_err(|_| Error::<T>::SwapError)?
+			} else {
+				tip_amount
 			};
-			T::AssetTransactor::can_check_out(&who_location, &ether_asset, &xcm_context).map_err(|_| Error::<T>::WithdrawError)?;
-			T::AssetTransactor::check_out(&who_location, &ether_asset, &xcm_context);
-			T::AssetTransactor::withdraw_asset(&ether_asset, &who_location, None).map_err(|_| Error::<T>::WithdrawError)?;
 
-			// Send the tip details to BH to be allocated to the reward in the Inbound/Outbound pallet
+			// Send the tip details to BH to be allocated to the reward in the Inbound/Outbound
+			// pallet
 			let dest = T::BridgeHubLocation::get();
-			let call = Self::build_add_tip_call(message_id.clone(), ether_gained);
+			let call = Self::build_add_tip_call(who, message_id.clone(), ether_gained);
 			let remote_xcm = Self::build_remote_xcm(&call);
 			let local_pallet_origin: Location = T::PalletLocation::get().into();
 
@@ -325,12 +316,44 @@ pub mod pallet {
 			T::XcmSender::deliver(ticket)
 		}
 
+		fn swap_and_burn(
+			who: AccountIdOf<T>,
+			tip_asset_location: Location,
+			ether_location: Location,
+			tip_amount: u128,
+		) -> Result<u128, DispatchError> {
+			// Swap tip asset to ether
+			let swap_path = vec![tip_asset_location.clone(), ether_location.clone()];
+			let who_location = Self::account_to_location(who.clone())?;
+
+			let balance_before = T::ForeignToken::balance(ether_location.clone(), &who);
+			T::Swap::swap_exact_tokens_for_tokens(
+				who.clone(),
+				swap_path,
+				tip_amount,
+				None,
+				who.clone(),
+				true,
+			)
+			.map_err(|_| Error::<T>::SwapError)?; // TODO show xcm error
+			let balance_after = T::ForeignToken::balance(ether_location.clone(), &who);
+			let ether_gained = balance_after.saturating_sub(balance_before);
+
+			// Burn the ether
+			let ether_asset = Asset::from((ether_location.clone(), ether_gained));
+
+			burn_for_teleport::<T::AssetTransactor>(&who_location, &ether_asset)
+				.map_err(|_| Error::<T>::SwapError)?; // TODO show xcm error
+
+			Ok(ether_gained)
+		}
+
 		// Build the call to dispatch the `EthereumSystem::register_token` extrinsic on BH
 		fn build_register_token_call(
 			sender: &Location,
 			asset: &Location,
 			metadata: AssetMetadata,
-		) -> Result<BridgeHubRuntime, Error<T>> {
+		) -> Result<BridgeHubRuntime<T>, Error<T>> {
 			// reanchor locations relative to BH
 			let sender = Self::reanchored(&sender)?;
 			let asset = Self::reanchored(&asset)?;
@@ -346,10 +369,12 @@ pub mod pallet {
 
 		// Build the call to dispatch the `EthereumSystem::add_tip` extrinsic on BH
 		fn build_add_tip_call(
+			sender: AccountIdOf<T>,
 			message_id: MessageId,
 			amount: u128,
-		) -> BridgeHubRuntime {
+		) -> BridgeHubRuntime<T> {
 			BridgeHubRuntime::EthereumSystem(EthereumSystemCall::AddTip {
+				sender,
 				message_id,
 				amount,
 			})

@@ -3,13 +3,14 @@
 use super::*;
 
 use crate::{self as inbound_queue_v2};
-use codec::Encode;
+use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use frame_support::{
 	derive_impl, parameter_types,
 	traits::ConstU32,
 	weights::{constants::RocksDbWeight, IdentityFee},
 };
 use hex_literal::hex;
+use scale_info::TypeInfo;
 use snowbridge_beacon_primitives::{
 	types::deneb, BeaconHeader, ExecutionProof, Fork, ForkVersions, VersionedExecutionPayloadHeader,
 };
@@ -22,15 +23,9 @@ use sp_runtime::{
 };
 use sp_std::{convert::From, default::Default, marker::PhantomData};
 use xcm::{latest::SendXcm, opaque::latest::WESTEND_GENESIS_HASH, prelude::*};
-use codec::Decode;
-use codec::DecodeWithMemTracking;
-use codec::MaxEncodedLen;
-use scale_info::TypeInfo;
 type Block = frame_system::mocking::MockBlock<Test>;
-use bp_relayers::RewardsAccountParams;
-use bp_relayers::PaymentProcedure;
+use bp_relayers::{PaymentProcedure, RewardsAccountOwner, RewardsAccountParams};
 use sp_runtime::DispatchResult;
-use bp_relayers::RewardsAccountOwner;
 
 frame_support::construct_runtime!(
 	pub enum Test
@@ -49,16 +44,16 @@ pub type AccountId = <<Signature as Verify>::Signer as IdentifyAccount>::Account
 type Balance = u128;
 
 #[derive(
-Clone,
-Copy,
-Debug,
-Decode,
-DecodeWithMemTracking,
-Encode,
-Eq,
-MaxEncodedLen,
-PartialEq,
-TypeInfo,
+	Clone,
+	Copy,
+	Debug,
+	Decode,
+	DecodeWithMemTracking,
+	Encode,
+	Eq,
+	MaxEncodedLen,
+	PartialEq,
+	TypeInfo,
 )]
 pub enum BridgeReward {
 	/// Rewards for Snowbridge.
@@ -134,7 +129,7 @@ pub struct MockPaymentProcedure;
 
 // Provide a no-op or mock implementation for the required trait
 impl PaymentProcedure<sp_runtime::AccountId32, RewardsAccountParams<u64>, u128>
-for MockPaymentProcedure
+	for MockPaymentProcedure
 {
 	type Error = DispatchResult;
 	type Beneficiary = Location;
@@ -142,7 +137,7 @@ for MockPaymentProcedure
 		_who: &sp_runtime::AccountId32,
 		_reward_params: bp_relayers::RewardsAccountParams<u64>,
 		_reward_balance: u128,
-		_beneficiary: Self::Beneficiary
+		_beneficiary: Self::Beneficiary,
 	) -> Result<(), Self::Error> {
 		Ok(())
 	}
@@ -150,11 +145,7 @@ for MockPaymentProcedure
 
 impl From<BridgeReward> for RewardsAccountParams<u64> {
 	fn from(_bridge_reward: BridgeReward) -> Self {
-		RewardsAccountParams::new(
-			1,
-			[0; 4],
-			RewardsAccountOwner::ThisChain,
-		)
+		RewardsAccountParams::new(1, [0; 4], RewardsAccountOwner::ThisChain)
 	}
 }
 
