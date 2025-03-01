@@ -2,12 +2,11 @@
 // SPDX-FileCopyrightText: 2023 Snowfork <hello@snowfork.com>
 //! Benchmarking setup for pallet-template
 use super::*;
-
 #[allow(unused)]
 use crate::Pallet as SnowbridgeControlFrontend;
 use frame_benchmarking::v2::*;
 use frame_system::RawOrigin;
-use xcm::prelude::*;
+use xcm::prelude::{Location, *};
 
 #[benchmarks]
 mod benchmarks {

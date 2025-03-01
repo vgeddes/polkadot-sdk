@@ -9,6 +9,7 @@ use frame_support::{
 	BoundedVec,
 };
 
+use codec::{Encode, MaxEncodedLen};
 use bp_relayers::{PaymentProcedure, RewardsAccountOwner, RewardsAccountParams};
 use codec::{DecodeWithMemTracking, Encode, MaxEncodedLen};
 use hex_literal::hex;
@@ -168,6 +169,23 @@ parameter_types! {
 }
 
 pub const DOT: u128 = 10_000_000_000;
+
+/// Showcasing that we can handle multiple different rewards with the same pallet.
+#[derive(Clone, Copy, Debug, Decode, Encode, Eq, MaxEncodedLen, PartialEq, TypeInfo)]
+pub enum BridgeReward {
+	/// Rewards for Snowbridge.
+	Snowbridge,
+}
+
+impl RewardLedger<<mock::Test as frame_system::Config>::AccountId, BridgeReward, u128> for () {
+	fn register_reward(
+		_relayer: &<mock::Test as frame_system::Config>::AccountId,
+		_reward: BridgeReward,
+		_reward_balance: u128,
+	) {
+	}
+}
+
 impl crate::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type Verifier = MockVerifier;
@@ -183,7 +201,6 @@ impl crate::Config for Test {
 	type ConvertAssetId = ();
 	type EthereumNetwork = EthereumNetwork;
 	type RewardKind = BridgeReward;
-
 	type DefaultRewardKind = SnowbridgeReward;
 	type RewardPayment = BridgeRelayers;
 }
