@@ -15,8 +15,9 @@
 use crate::{
 	imports::*,
 	tests::snowbridge_common::{
-		erc20_token_location, eth_location, register_foreign_asset, set_up_eth_and_dot_pool,
-		set_up_eth_and_dot_pool_on_penpal, snowbridge_sovereign, weth_location,
+		erc20_token_location, eth_location, fund_on_ah, fund_on_bh, register_assets_on_ah,
+		register_foreign_asset, set_up_eth_and_dot_pool, set_up_eth_and_dot_pool_on_penpal,
+		snowbridge_sovereign, weth_location,
 	},
 };
 use asset_hub_westend_runtime::ForeignAssets;
@@ -29,7 +30,7 @@ use codec::Encode;
 use emulated_integration_tests_common::{RESERVABLE_ASSET_ID, WETH};
 use hex_literal::hex;
 use rococo_westend_system_emulated_network::penpal_emulated_chain::PARA_ID_B;
-use snowbridge_core::{AssetMetadata, TokenIdOf};
+use snowbridge_core::{reward::MessageId, AssetMetadata, TokenIdOf};
 use snowbridge_inbound_queue_primitives::{
 	v2::{
 		EthereumAsset::{ForeignTokenERC20, NativeTokenERC20},
@@ -37,6 +38,7 @@ use snowbridge_inbound_queue_primitives::{
 	},
 	EthereumLocationsConverterFor,
 };
+use snowbridge_pallet_system_v2::LostTips;
 use sp_core::{H160, H256};
 use sp_runtime::MultiAddress;
 use xcm::opaque::latest::AssetTransferFilter::ReserveDeposit;
@@ -1023,5 +1025,134 @@ fn invalid_claimer_does_not_fail_the_message() {
 			)),
 			"Assets were trapped, should not happen."
 		);
+	});
+}
+
+#[test]
+pub fn add_tip_from_asset_hub_user_origin() {
+	fund_on_bh();
+	register_assets_on_ah();
+	fund_on_ah();
+	set_up_eth_and_dot_pool();
+	let relayer = AssetHubWestendSender::get();
+
+	// Add the tip to a nonce that has not been processed.
+	let tip_message_id = MessageId::Inbound(2);
+
+	let dot = Location::new(1, Here);
+	AssetHubWestend::execute_with(|| {
+		type RuntimeOrigin = <AssetHubWestend as Chain>::RuntimeOrigin;
+
+		assert_ok!(<AssetHubWestend as AssetHubWestendPallet>::SnowbridgeSystemFrontend::add_tip(
+			RuntimeOrigin::signed(relayer),
+			tip_message_id.clone(),
+			xcm::prelude::Asset::from((dot, 1_000_000_000u128)),
+		));
+	});
+
+	BridgeHubWestend::execute_with(|| {
+		type RuntimeEvent = <BridgeHubWestend as Chain>::RuntimeEvent;
+
+		let events = BridgeHubWestend::events();
+		assert!(
+			events.iter().any(|event| matches!(
+				event,
+				RuntimeEvent::EthereumSystemV2(snowbridge_pallet_system_v2::Event::TipAdded { message_id, success, ..})
+					if *message_id == tip_message_id.clone() && *success == true, // expect success
+			)),
+			"tip added event found"
+		);
+	});
+}
+
+#[test]
+pub fn tip_to_processed_nonce_is_added_to_lost_tips() {
+	fund_on_bh();
+	fund_on_ah();
+	set_up_eth_and_dot_pool();
+	let relayer = AssetHubWestendSender::get();
+
+	AssetHubWestend::fund_accounts(vec![(relayer.clone(), INITIAL_FUND)]);
+
+	// A nonce that has been processed.
+	let tip_message_id = MessageId::Inbound(1);
+
+	let relayer_account = BridgeHubWestendSender::get();
+	let relayer_reward = 1_500_000_000_000u128;
+	let receiver = AssetHubWestendReceiver::get();
+	BridgeHubWestend::fund_accounts(vec![(relayer_account.clone(), INITIAL_FUND)]);
+	AssetHubWestend::fund_accounts(vec![(snowbridge_sovereign(), INITIAL_FUND)]);
+
+	let claimer = Location::new(0, AccountId32 { network: None, id: receiver.clone().into() });
+	let claimer_bytes = claimer.encode();
+
+	let token: H160 = TOKEN_ID.into();
+
+	// Fund the relayer account to pay xcm delivery fees from AH -> BH.
+	AssetHubWestend::fund_accounts(vec![(relayer.clone(), INITIAL_FUND)]);
+
+	// Send a message from Ethereum to AH to increase the nonce
+	BridgeHubWestend::execute_with(|| {
+		type RuntimeEvent = <BridgeHubWestend as Chain>::RuntimeEvent;
+		let origin = EthereumGatewayAddress::get();
+
+		let message = Message {
+			gateway: origin,
+			nonce: 1,
+			origin,
+			assets: vec![],
+			xcm: XcmPayload::CreateAsset { token, network: 0 },
+			claimer: Some(claimer_bytes),
+			// Used to pay the asset creation deposit.
+			value: 9_000_000_000_000u128,
+			execution_fee: 1_500_000_000_000u128,
+			relayer_fee: relayer_reward,
+		};
+
+		EthereumInboundQueueV2::process_message(relayer_account.clone(), message).unwrap();
+
+		assert_expected_events!(
+			BridgeHubWestend,
+			vec![
+				RuntimeEvent::XcmpQueue(cumulus_pallet_xcmp_queue::Event::XcmpMessageSent { .. }) => {},
+				// Check that the relayer reward was registered.
+				RuntimeEvent::BridgeRelayers(pallet_bridge_relayers::Event::RewardRegistered { relayer, reward_kind, reward_balance }) => {
+					relayer: *relayer == relayer_account,
+					reward_kind: *reward_kind == BridgeReward::Snowbridge,
+					reward_balance: *reward_balance == relayer_reward,
+				},
+			]
+		);
+	});
+
+	let dot = Location::new(1, Here);
+	AssetHubWestend::execute_with(|| {
+		type RuntimeOrigin = <AssetHubWestend as Chain>::RuntimeOrigin;
+
+		assert_ok!(<AssetHubWestend as AssetHubWestendPallet>::SnowbridgeSystemFrontend::add_tip(
+			RuntimeOrigin::signed(relayer.clone()),
+			tip_message_id.clone(),
+			xcm::prelude::Asset::from((dot, 1_000_000_000u128)),
+		));
+	});
+
+	BridgeHubWestend::execute_with(|| {
+		type RuntimeEvent = <BridgeHubWestend as Chain>::RuntimeEvent;
+
+		let events = BridgeHubWestend::events();
+		assert!(
+			events.iter().any(|event| matches!(
+				event,
+				RuntimeEvent::EthereumSystemV2(snowbridge_pallet_system_v2::Event::TipAdded { message_id, success, ..})
+					if *message_id == tip_message_id.clone() && *success == false, // expect a failure
+			)),
+			"tip added event found"
+		);
+
+		let relayer_lost_tip = LostTips::<bridge_hub_westend_runtime::Runtime>::get::<
+			sp_runtime::AccountId32,
+		>(relayer.into());
+		// Assert a tip was added to storage.
+		assert_ne!(relayer_lost_tip, 0);
 	});
 }

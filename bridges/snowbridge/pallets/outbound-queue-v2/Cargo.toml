@@ -51,7 +51,6 @@ sp-keyring = { workspace = true, default-features = true }
 [features]
 default = ["std"]
 std = [
-	"tracing/std",
 	"alloy-core/std",
 	"bp-relayers/std",
 	"bridge-hub-common/std",

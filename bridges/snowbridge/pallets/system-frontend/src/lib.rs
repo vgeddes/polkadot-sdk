@@ -333,7 +333,10 @@ pub mod pallet {
 				who.clone(),
 				true,
 			)
-			.map_err(|_| Error::<T>::SwapError)?; // TODO show xcm error
+			.map_err(|e| {
+				tracing::error!(target: LOG_TARGET, ?e, "swap error");
+				Error::<T>::SwapError
+			})?; // TODO show xcm error
 
 			// Burn the ether
 			let ether_asset = Asset::from((ether_location.clone(), ether_gained));
