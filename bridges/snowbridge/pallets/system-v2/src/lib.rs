@@ -36,7 +36,7 @@ use frame_support::{pallet_prelude::*, traits::EnsureOrigin};
 use frame_system::pallet_prelude::*;
 use snowbridge_core::{
 	reward::{
-		AddTip, AddTipError, MessageId,
+		AddTip, MessageId,
 		MessageId::{Inbound, Outbound},
 	},
 	AgentIdOf as LocationHashOf, AssetMetadata, TokenId, TokenIdOf,
@@ -111,6 +111,16 @@ pub mod pallet {
 			/// ID of Polkadot-native token on Ethereum
 			foreign_token_id: H256,
 		},
+		/// A tip was added for an inbound or outbound message, for relayer incentivization.
+		TipAdded {
+			/// The Inbound/Outbound message nonce
+			message_id: MessageId,
+			/// The tip amount in ether.
+			amount: u128,
+			/// Whether the tip was added successfully. If the tip was added for a nonce
+			/// that was already consumed, the tip will be added to LostTips.
+			success: bool,
+		},
 	}
 
 	#[pallet::error]
@@ -121,7 +131,6 @@ pub mod pallet {
 		InvalidLocation,
 		Send(SendError),
 		InvalidUpgradeParameters,
-		TipError(AddTipError),
 	}
 
 	/// Relayer reward tips that were added but the nonce was already consumed.
@@ -252,15 +261,22 @@ pub mod pallet {
 				Outbound(nonce) => <T as pallet::Config>::OutboundQueue::add_tip(nonce, amount),
 			};
 
+			Self::deposit_event(Event::<T>::TipAdded {
+				message_id,
+				amount,
+				success: result.is_ok(),
+			});
+
 			match result {
-				Ok(()) => Ok(()),
-				Err(e) => {
+				Ok(()) => (),
+				Err(_) => {
 					LostTips::<T>::mutate(&sender, |lost_tip| {
 						*lost_tip = lost_tip.saturating_add(amount);
 					});
-					return Err(Error::<T>::TipError(e).into());
 				},
 			}
+
+			Ok(())
 		}
 	}
 

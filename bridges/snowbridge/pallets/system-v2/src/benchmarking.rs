@@ -31,6 +31,19 @@ mod benchmarks {
 		Ok(())
 	}
 
+	#[benchmark]
+	fn add_tip() -> Result<(), BenchmarkError> {
+		let origin_location = Location::new(1, [Parachain(1000)]);
+		let origin = <T as Config>::Helper::make_xcm_origin(origin_location.clone());
+		let sender: T::AccountId = whitelisted_caller();
+		let message_id = MessageId::Inbound(1);
+
+		#[extrinsic_call]
+		_(origin as T::RuntimeOrigin, sender, message_id, 1_000_000_000u128);
+
+		Ok(())
+	}
+
 	impl_benchmark_test_suite!(
 		SnowbridgeControl,
 		crate::mock::new_test_ext(true),

@@ -64,8 +64,6 @@ fn register_token_v2() {
 	let claimer = Location::new(0, AccountId32 { network: None, id: receiver.clone().into() });
 	let claimer_bytes = claimer.encode();
 
-	let bridge_owner = EthereumLocationsConverterFor::<[u8; 32]>::from_chain_id(&CHAIN_ID);
-
 	let token: H160 = TOKEN_ID.into();
 
 	BridgeHubWestend::execute_with(|| {
@@ -77,10 +75,7 @@ fn register_token_v2() {
 			nonce: 1,
 			origin,
 			assets: vec![],
-			xcm: XcmPayload::CreateAsset {
-				token,
-				network: 0,
-			},
+			xcm: XcmPayload::CreateAsset { token, network: 0 },
 			claimer: Some(claimer_bytes),
 			// Used to pay the asset creation deposit.
 			value: 9_000_000_000_000u128,
