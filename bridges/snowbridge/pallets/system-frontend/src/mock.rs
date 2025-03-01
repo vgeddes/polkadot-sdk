@@ -9,10 +9,11 @@ use frame_support::{
 	derive_impl, parameter_types,
 	traits::{AsEnsureOriginWithArg, Everything},
 };
+use pallet_asset_conversion::Swap;
 use sp_core::H256;
 use sp_runtime::{
 	traits::{BlakeTwo256, IdentityLookup},
-	AccountId32, BuildStorage,
+	AccountId32, BuildStorage, DispatchError,
 };
 use xcm::prelude::*;
 use xcm_executor::{
@@ -237,6 +238,44 @@ impl TransactAsset for SuccessfulTransactor {
 	}
 }
 
+thread_local! {
+	// Global counter for number of times `balance` is called
+	static BALANCE_CALL_COUNT: RefCell<u64> = RefCell::new(0);
+}
+
+pub struct SwapExecutor;
+
+impl Swap<AccountId> for SwapExecutor {
+	type Balance = u128;
+	type AssetKind = Location;
+
+	fn max_path_len() -> u32 {
+		2
+	}
+
+	fn swap_exact_tokens_for_tokens(
+		_sender: AccountId,
+		_path: Vec<Self::AssetKind>,
+		_amount_in: Self::Balance,
+		_amount_out_min: Option<Self::Balance>,
+		_send_to: AccountId,
+		_keep_alive: bool,
+	) -> Result<Self::Balance, DispatchError> {
+		Ok(1_000_000_000u128)
+	}
+
+	fn swap_tokens_for_exact_tokens(
+		_sender: AccountId,
+		_path: Vec<Self::AssetKind>,
+		_amount_out: Self::Balance,
+		_amount_in_max: Option<Self::Balance>,
+		_send_to: AccountId,
+		_keep_alive: bool,
+	) -> Result<Self::Balance, DispatchError> {
+		unimplemented!()
+	}
+}
+
 pub enum Weightless {}
 impl PreparedMessage for Weightless {
 	fn weight_of(&self) -> Weight {
@@ -298,6 +337,7 @@ impl crate::Config for Test {
 	type UniversalLocation = UniversalLocation;
 	type PalletLocation = PalletLocation;
 	type BackendWeightInfo = ();
+	type Swap = SwapExecutor;
 	type WeightInfo = ();
 	#[cfg(feature = "runtime-benchmarks")]
 	type Helper = ();

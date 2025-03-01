@@ -24,13 +24,7 @@ pub use weights::*;
 pub mod backend_weights;
 pub use backend_weights::*;
 
-use frame_support::{
-	pallet_prelude::*,
-	traits::{
-		fungibles::{Inspect, Mutate},
-		EnsureOriginWithArg,
-	},
-};
+use frame_support::{pallet_prelude::*, traits::EnsureOriginWithArg};
 use frame_system::pallet_prelude::*;
 use pallet_asset_conversion::Swap;
 use snowbridge_core::{
@@ -103,13 +97,8 @@ pub mod pallet {
 
 		/// To withdraw and deposit an asset.
 		type AssetTransactor: TransactAsset;
-		/// Message relayers are rewarded with this asset
-		type ForeignToken: Inspect<Self::AccountId, AssetId = Location, Balance = u128>
-			+ Mutate<Self::AccountId, AssetId = Location, Balance = u128>;
-
 		/// To charge XCM delivery fees
 		type XcmExecutor: ExecuteXcm<Self::RuntimeCall> + FeeManager;
-
 		/// Fee asset for the execution cost on ethereum
 		type EthereumLocation: Get<Location>;
 		/// To swap the provided tip asset for
@@ -326,8 +315,7 @@ pub mod pallet {
 			let swap_path = vec![tip_asset_location.clone(), ether_location.clone()];
 			let who_location = Self::account_to_location(who.clone())?;
 
-			let balance_before = T::ForeignToken::balance(ether_location.clone(), &who);
-			T::Swap::swap_exact_tokens_for_tokens(
+			let ether_gained = T::Swap::swap_exact_tokens_for_tokens(
 				who.clone(),
 				swap_path,
 				tip_amount,
@@ -336,8 +324,6 @@ pub mod pallet {
 				true,
 			)
 			.map_err(|_| Error::<T>::SwapError)?; // TODO show xcm error
-			let balance_after = T::ForeignToken::balance(ether_location.clone(), &who);
-			let ether_gained = balance_after.saturating_sub(balance_before);
 
 			// Burn the ether
 			let ether_asset = Asset::from((ether_location.clone(), ether_gained));
