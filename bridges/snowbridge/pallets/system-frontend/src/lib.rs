@@ -26,7 +26,7 @@ pub use backend_weights::*;
 
 use frame_support::{
 	pallet_prelude::*,
-	traits::{EnsureOriginWithArg, OriginTrait},
+	traits::EnsureOriginWithArg,
 };
 use frame_system::pallet_prelude::*;
 use pallet_asset_conversion::Swap;
