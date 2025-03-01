@@ -13,6 +13,7 @@ workspace = true
 
 [dependencies]
 codec = { workspace = true, default-features = true }
+bp-relayers = { workspace = true, default-features = true }
 frame-benchmarking = { optional = true, workspace = true, default-features = true }
 frame-support = { workspace = true, default-features = true }
 frame-system = { workspace = true, default-features = true }
@@ -20,6 +21,7 @@ hex = { workspace = true, default-features = true }
 log = { workspace = true, default-features = true }
 pallet-xcm = { workspace = true, default-features = true }
 scale-info = { features = ["derive"], workspace = true, default-features = true }
+snowbridge-core = { workspace = true, default-features = true }
 snowbridge-outbound-queue-primitives = { workspace = true, default-features = true }
 sp-core = { workspace = true, default-features = true }
 sp-std = { workspace = true, default-features = true }

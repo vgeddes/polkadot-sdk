@@ -46,6 +46,7 @@ xcm-executor = { workspace = true }
 pallet-balances = { workspace = true }
 pallet-bridge-relayers = { workspace = true }
 pallet-message-queue = { workspace = true }
+snowbridge-test-utils = { workspace = true }
 sp-keyring = { workspace = true, default-features = true }
 
 [features]

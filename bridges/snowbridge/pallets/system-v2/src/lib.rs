@@ -34,7 +34,7 @@ pub use weights::*;
 
 use frame_support::{
 	pallet_prelude::*,
-	traits::{EnsureOrigin, OriginTrait},
+	traits::EnsureOrigin,
 };
 use frame_system::pallet_prelude::*;
 use snowbridge_core::{

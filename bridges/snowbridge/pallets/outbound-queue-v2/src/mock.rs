@@ -9,21 +9,19 @@ use frame_support::{
 	BoundedVec,
 };
 
-use codec::{Encode, MaxEncodedLen};
-use bp_relayers::{PaymentProcedure, RewardsAccountOwner, RewardsAccountParams};
-use codec::{DecodeWithMemTracking, Encode, MaxEncodedLen};
+use bp_relayers::RewardsAccountParams;
 use hex_literal::hex;
-use scale_info::TypeInfo;
 use snowbridge_core::{
 	gwei, meth,
 	pricing::{PricingParameters, Rewards},
 	AgentId, AgentIdOf, ParaId,
 };
 use snowbridge_outbound_queue_primitives::{v2::*, Log, Proof, VerificationError, Verifier};
+use snowbridge_test_utils::mock_rewards::{BridgeReward, MockPaymentProcedure};
 use sp_core::{ConstU32, H160, H256};
 use sp_runtime::{
 	traits::{BlakeTwo256, IdentityLookup, Keccak256},
-	AccountId32, BuildStorage, DispatchResult, FixedU128,
+	AccountId32, BuildStorage, FixedU128,
 };
 use sp_std::marker::PhantomData;
 use xcm::prelude::Here;
@@ -92,29 +90,6 @@ impl pallet_message_queue::Config for Test {
 	type QueuePausedQuery = ();
 }
 
-#[derive(
-	Clone,
-	Copy,
-	Debug,
-	Decode,
-	DecodeWithMemTracking,
-	Encode,
-	Eq,
-	MaxEncodedLen,
-	PartialEq,
-	TypeInfo,
-)]
-pub enum BridgeReward {
-	/// Rewards for Snowbridge.
-	Snowbridge,
-}
-
-impl From<BridgeReward> for RewardsAccountParams<u64> {
-	fn from(_bridge_reward: BridgeReward) -> Self {
-		RewardsAccountParams::new(1, [0; 4], RewardsAccountOwner::ThisChain)
-	}
-}
-
 impl pallet_bridge_relayers::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type RewardBalance = u128;
@@ -123,24 +98,6 @@ impl pallet_bridge_relayers::Config for Test {
 	type StakeAndSlash = ();
 	type Balance = Balance;
 	type WeightInfo = ();
-}
-
-pub struct MockPaymentProcedure;
-
-// Provide a no-op or mock implementation for the required trait
-impl PaymentProcedure<sp_runtime::AccountId32, RewardsAccountParams<u64>, u128>
-	for MockPaymentProcedure
-{
-	type Error = DispatchResult;
-	type Beneficiary = Location;
-	fn pay_reward(
-		_who: &sp_runtime::AccountId32,
-		_reward_params: bp_relayers::RewardsAccountParams<u64>,
-		_reward_balance: u128,
-		_beneficiary: Self::Beneficiary,
-	) -> Result<(), Self::Error> {
-		Ok(())
-	}
 }
 
 // Mock verifier
@@ -169,22 +126,6 @@ parameter_types! {
 }
 
 pub const DOT: u128 = 10_000_000_000;
-
-/// Showcasing that we can handle multiple different rewards with the same pallet.
-#[derive(Clone, Copy, Debug, Decode, Encode, Eq, MaxEncodedLen, PartialEq, TypeInfo)]
-pub enum BridgeReward {
-	/// Rewards for Snowbridge.
-	Snowbridge,
-}
-
-impl RewardLedger<<mock::Test as frame_system::Config>::AccountId, BridgeReward, u128> for () {
-	fn register_reward(
-		_relayer: &<mock::Test as frame_system::Config>::AccountId,
-		_reward: BridgeReward,
-		_reward_balance: u128,
-	) {
-	}
-}
 
 impl crate::Config for Test {
 	type RuntimeEvent = RuntimeEvent;

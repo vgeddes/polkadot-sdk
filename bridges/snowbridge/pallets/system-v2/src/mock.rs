@@ -13,7 +13,7 @@ use snowbridge_core::{
 	gwei, meth, sibling_sovereign_account, AllowSiblingsOnly, ParaId, PricingParameters, Rewards,
 };
 
-pub use snowbridge_test_utils::{mock_origin::pallet_xcm_origin, mock_outbound_queue::*};
+pub use snowbridge_test_utils::{mock_origin::pallet_xcm_origin, mock_outbound_queue::*, mock_inbound_queue::*};
 use sp_runtime::{
 	traits::{AccountIdConversion, BlakeTwo256, IdentityLookup},
 	AccountId32, BuildStorage, FixedU128,
@@ -22,7 +22,6 @@ use xcm::{opaque::latest::WESTEND_GENESIS_HASH, prelude::*};
 
 #[cfg(feature = "runtime-benchmarks")]
 use crate::BenchmarkHelper;
-use snowbridge_core::reward::{AddTip, AddTipError};
 
 type Block = frame_system::mocking::MockBlock<Test>;
 type Balance = u128;
