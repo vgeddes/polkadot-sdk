@@ -68,6 +68,8 @@ pub enum EthereumSystemCall<T: frame_system::Config> {
 }
 
 #[cfg(feature = "runtime-benchmarks")]
+use frame_support::traits::OriginTrait;
+#[cfg(feature = "runtime-benchmarks")]
 pub trait BenchmarkHelper<O>
 where
 	O: OriginTrait,

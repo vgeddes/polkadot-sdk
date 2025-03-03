@@ -14,14 +14,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#[cfg(not(feature = "runtime-benchmarks"))]
+use crate::xcm_config::XcmRouter;
 use crate::{
 	bridge_common_config::BridgeReward,
 	xcm_config,
-	xcm_config::{TreasuryAccount, UniversalLocation},
+	xcm_config::{RelayNetwork, TreasuryAccount, UniversalLocation, XcmConfig},
 	Balances, BridgeRelayers, EthereumInboundQueue, EthereumInboundQueueV2, EthereumOutboundQueue,
 	EthereumOutboundQueueV2, EthereumSystem, EthereumSystemV2, MessageQueue, Runtime, RuntimeEvent,
 	TransactionByteFee,
 };
+#[cfg(feature = "runtime-benchmarks")]
+use benchmark_helpers::DoNothingRouter;
+use frame_support::{parameter_types, traits::Contains, weights::ConstantMultiplier};
+use frame_system::EnsureRootWithSuccess;
+use pallet_xcm::EnsureXcm;
 use parachains_common::{AccountId, Balance};
 use snowbridge_beacon_primitives::{Fork, ForkVersions};
 use snowbridge_core::{gwei, meth, AllowSiblingsOnly, PricingParameters, Rewards};
@@ -30,6 +37,10 @@ use snowbridge_outbound_queue_primitives::{
 	v2::{ConstantGasMeter as ConstantGasMeterV2, EthereumBlobExporter as EthereumBlobExporterV2},
 };
 use sp_core::H160;
+use sp_runtime::{
+	traits::{ConstU32, ConstU8, Keccak256},
+	FixedU128,
+};
 use testnet_parachains_constants::westend::{
 	currency::*,
 	fee::WeightToFee,
@@ -37,17 +48,6 @@ use testnet_parachains_constants::westend::{
 		AssetHubParaId, EthereumLocation, EthereumNetwork, FRONTEND_PALLET_INDEX,
 		INBOUND_QUEUE_PALLET_INDEX_V1, INBOUND_QUEUE_PALLET_INDEX_V2,
 	},
-};
-
-use crate::xcm_config::{RelayNetwork, XcmConfig, XcmRouter};
-#[cfg(feature = "runtime-benchmarks")]
-use benchmark_helpers::DoNothingRouter;
-use frame_support::{parameter_types, traits::Contains, weights::ConstantMultiplier};
-use frame_system::EnsureRootWithSuccess;
-use pallet_xcm::EnsureXcm;
-use sp_runtime::{
-	traits::{ConstU32, ConstU8, Keccak256},
-	FixedU128,
 };
 use xcm::prelude::{GlobalConsensus, InteriorLocation, Location, PalletInstance, Parachain};
 use xcm_executor::XcmExecutor;

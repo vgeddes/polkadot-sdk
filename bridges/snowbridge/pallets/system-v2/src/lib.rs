@@ -32,11 +32,9 @@ pub mod api;
 pub mod weights;
 pub use weights::*;
 
-use frame_support::{
-	pallet_prelude::*,
-	traits::EnsureOrigin,
-};
+use frame_support::{pallet_prelude::*, traits::EnsureOrigin};
 use frame_system::pallet_prelude::*;
+pub use pallet::*;
 use snowbridge_core::{
 	reward::{
 		AddTip, MessageId,
@@ -56,10 +54,10 @@ use sp_std::prelude::*;
 use xcm::prelude::*;
 use xcm_executor::traits::ConvertLocation;
 
-pub use pallet::*;
-
 pub type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
 
+#[cfg(feature = "runtime-benchmarks")]
+use frame_support::traits::OriginTrait;
 #[cfg(feature = "runtime-benchmarks")]
 pub trait BenchmarkHelper<O>
 where

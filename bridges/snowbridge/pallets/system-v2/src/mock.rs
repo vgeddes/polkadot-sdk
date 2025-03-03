@@ -13,7 +13,9 @@ use snowbridge_core::{
 	gwei, meth, sibling_sovereign_account, AllowSiblingsOnly, ParaId, PricingParameters, Rewards,
 };
 
-pub use snowbridge_test_utils::{mock_origin::pallet_xcm_origin, mock_outbound_queue::*, mock_inbound_queue::*};
+pub use snowbridge_test_utils::{
+	mock_inbound_queue::*, mock_origin::pallet_xcm_origin, mock_outbound_queue::*,
+};
 use sp_runtime::{
 	traits::{AccountIdConversion, BlakeTwo256, IdentityLookup},
 	AccountId32, BuildStorage, FixedU128,
