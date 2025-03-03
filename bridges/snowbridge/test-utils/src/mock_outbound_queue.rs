@@ -35,7 +35,10 @@ impl SendMessageFeeProvider for MockOkOutboundQueue {
 }
 
 impl AddTip for MockOkOutboundQueue {
-	fn add_tip(_nonce: u64, _amount: u128) -> Result<(), AddTipError> {
+	fn add_tip(nonce: u64, _amount: u128) -> Result<(), AddTipError> {
+		if nonce == 3 {
+			return Err(AddTipError::NonceConsumed)
+		}
 		Ok(())
 	}
 }
