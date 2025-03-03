@@ -27,7 +27,7 @@ pub enum MessageId {
 	Outbound(u64),
 }
 
-#[derive(Debug, Encode, DecodeWithMemTracking, Decode, TypeInfo, PalletError)]
+#[derive(Debug, Encode, PartialEq, DecodeWithMemTracking, Decode, TypeInfo, PalletError)]
 pub enum AddTipError {
 	NonceConsumed,
 }
