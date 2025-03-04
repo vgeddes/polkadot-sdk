@@ -160,8 +160,8 @@ fn exporter_validate_without_universal_source_yields_missing_argument() {
 fn exporter_validate_without_global_universal_location_yields_not_applicable() {
 	let network = BridgedNetwork::get();
 	let channel: u32 = 0;
-	let mut universal_source: Option<InteriorLocation> = Here.into();
-	let mut destination: Option<InteriorLocation> = Here.into();
+	let mut universal_source: Option<InteriorLocation> = Some([GlobalConsensus(NetworkId::Polkadot)].into());
+	let mut destination: Option<InteriorLocation> = Some([GlobalConsensus(NetworkId::Ethereum { chain_id: 11155111 })].into());
 	let mut message: Option<Xcm<()>> = None;
 
 	let result =
@@ -330,7 +330,7 @@ fn exporter_validate_with_max_target_fee_yields_unroutable() {
 }
 
 #[test]
-fn exporter_validate_with_unparsable_xcm_yields_unroutable() {
+fn exporter_validate_with_unparsable_xcm_yields_not_applicable() {
 	let network = BridgedNetwork::get();
 	let mut destination: Option<InteriorLocation> = Here.into();
 
@@ -623,7 +623,7 @@ fn xcm_converter_convert_without_set_topic_yields_set_topic_expected() {
 }
 
 #[test]
-fn xcm_converter_convert_with_partial_message_yields_invalid_fee_asset() {
+fn xcm_converter_convert_with_partial_message_yields_unexpected_end_of_xcm() {
 	let network = BridgedNetwork::get();
 
 	let token_address: [u8; 20] = hex!("1000000000000000000000000000000000000000");
@@ -677,7 +677,7 @@ fn xcm_converter_with_fees_greater_than_reserve_fails() {
 	let beneficiary_address: [u8; 20] = hex!("2000000000000000000000000000000000000000");
 
 	let asset_location: Location = [AccountKey20 { network: None, key: token_address }].into();
-	let fee_asset: Asset = Asset { id: AssetId(Here.into()), fun: Fungible(2000) }.into(); // Fee is greater than asset amount
+	let fee_asset: Asset = Asset { id: AssetId([GlobalConsensus(NetworkId::Polkadot)].into()), fun: Fungible(2000) }.into(); // Fee is greater than asset amount
 
 	let assets: Assets = vec![Asset { id: AssetId(asset_location), fun: Fungible(1000) }].into();
 
