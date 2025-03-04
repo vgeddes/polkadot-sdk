@@ -3012,7 +3012,7 @@ dependencies = [
  "snowbridge-runtime-common 0.2.0",
  "snowbridge-runtime-test-common 0.2.0",
  "snowbridge-system-runtime-api 0.2.0",
- "snowbridge-system-runtime-api-v2",
+ "snowbridge-system-v2-runtime-api",
  "sp-api 26.0.0",
  "sp-block-builder 26.0.0",
  "sp-consensus-aura 0.32.0",
@@ -19286,7 +19286,7 @@ dependencies = [
  "snowbridge-runtime-common 0.2.0",
  "snowbridge-runtime-test-common 0.2.0",
  "snowbridge-system-runtime-api 0.2.0",
- "snowbridge-system-runtime-api-v2",
+ "snowbridge-system-v2-runtime-api",
  "snowbridge-verification-primitives",
  "sp-api 26.0.0",
  "sp-api-proc-macro 15.0.0",
@@ -26085,7 +26085,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "snowbridge-system-runtime-api-v2"
+name = "snowbridge-system-v2-runtime-api"
 version = "0.2.0"
 dependencies = [
  "parity-scale-codec",

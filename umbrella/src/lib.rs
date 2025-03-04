@@ -1260,8 +1260,8 @@ pub use snowbridge_runtime_test_common;
 pub use snowbridge_system_runtime_api;
 
 /// Snowbridge System Runtime API V2.
-#[cfg(feature = "snowbridge-system-runtime-api-v2")]
-pub use snowbridge_system_runtime_api_v2;
+#[cfg(feature = "snowbridge-system-v2-runtime-api")]
+pub use snowbridge_system_v2_runtime_api;
 
 /// Snowbridge Verification Primitives.
 #[cfg(feature = "snowbridge-verification-primitives")]

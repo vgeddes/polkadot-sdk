@@ -125,7 +125,7 @@ snowbridge-pallet-system = { workspace = true }
 snowbridge-pallet-system-v2 = { workspace = true }
 snowbridge-runtime-common = { workspace = true }
 snowbridge-system-runtime-api = { workspace = true }
-snowbridge-system-runtime-api-v2 = { workspace = true }
+snowbridge-system-v2-runtime-api = { workspace = true }
 
 
 [dev-dependencies]
@@ -213,7 +213,7 @@ std = [
 	"snowbridge-pallet-system-v2/std",
 	"snowbridge-pallet-system/std",
 	"snowbridge-runtime-common/std",
-	"snowbridge-system-runtime-api-v2/std",
+	"snowbridge-system-v2-runtime-api/std",
 	"snowbridge-system-runtime-api/std",
 	"sp-api/std",
 	"sp-block-builder/std",
