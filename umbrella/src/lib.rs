@@ -1200,8 +1200,8 @@ pub use snowbridge_outbound_queue_primitives;
 pub use snowbridge_outbound_queue_runtime_api;
 
 /// Snowbridge Outbound Queue Runtime API V2.
-#[cfg(feature = "snowbridge-outbound-queue-runtime-api-v2")]
-pub use snowbridge_outbound_queue_runtime_api_v2;
+#[cfg(feature = "snowbridge-outbound-queue-v2-runtime-api")]
+pub use snowbridge_outbound_queue_v2_runtime_api;
 
 /// Snowbridge Ethereum Client Pallet.
 #[cfg(feature = "snowbridge-pallet-ethereum-client")]

@@ -670,14 +670,14 @@ fn xcm_converter_with_different_fee_asset_succeed() {
 }
 
 #[test]
-fn xcm_converter_with_fees_greater_than_reserve_succeed() {
+fn xcm_converter_with_fees_greater_than_reserve_fails() {
 	let network = BridgedNetwork::get();
 
 	let token_address: [u8; 20] = hex!("1000000000000000000000000000000000000000");
 	let beneficiary_address: [u8; 20] = hex!("2000000000000000000000000000000000000000");
 
 	let asset_location: Location = [AccountKey20 { network: None, key: token_address }].into();
-	let fee_asset: Asset = Asset { id: AssetId(Here.into()), fun: Fungible(1000) }.into();
+	let fee_asset: Asset = Asset { id: AssetId(Here.into()), fun: Fungible(2000) }.into(); // Fee is greater than asset amount
 
 	let assets: Assets = vec![Asset { id: AssetId(asset_location), fun: Fungible(1000) }].into();
 
@@ -685,7 +685,7 @@ fn xcm_converter_with_fees_greater_than_reserve_succeed() {
 
 	let message: Xcm<()> = vec![
 		WithdrawAsset(assets.clone()),
-		PayFees { asset: fee_asset },
+		PayFees { asset: fee_asset }, // Fees exceed available balance
 		WithdrawAsset(assets.clone()),
 		AliasOrigin(Location::new(1, [GlobalConsensus(Polkadot), Parachain(1000)])),
 		DepositAsset {
@@ -694,10 +694,10 @@ fn xcm_converter_with_fees_greater_than_reserve_succeed() {
 		},
 		SetTopic([0; 32]),
 	]
-	.into();
+		.into();
 	let mut converter = XcmConverter::<MockTokenIdConvert, ()>::new(&message, network);
 	let result = converter.convert();
-	assert_eq!(result.is_ok(), true);
+	assert_eq!(result.is_ok(), false); // Now expecting failure
 }
 
 #[test]
