@@ -542,7 +542,7 @@ fn xcm_converter_convert_success() {
 	let fee_asset: Asset = Asset { id: AssetId(Here.into()), fun: Fungible(1000) }.into();
 
 	let message: Xcm<()> = vec![
-		WithdrawAsset(assets.clone()),
+		WithdrawAsset(fee_asset.clone().into()),
 		PayFees { asset: fee_asset },
 		WithdrawAsset(assets.clone()),
 		AliasOrigin(Location::new(1, [GlobalConsensus(Polkadot), Parachain(1000)])),
