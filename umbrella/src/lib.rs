@@ -1220,8 +1220,8 @@ pub use snowbridge_pallet_inbound_queue;
 pub use snowbridge_pallet_inbound_queue_fixtures;
 
 /// Snowbridge Inbound Queue Test Fixtures V2.
-#[cfg(feature = "snowbridge-pallet-inbound-queue-fixtures-v2")]
-pub use snowbridge_pallet_inbound_queue_fixtures_v2;
+#[cfg(feature = "snowbridge-pallet-inbound-queue-v2-fixtures")]
+pub use snowbridge_pallet_inbound_queue_v2_fixtures;
 
 /// Snowbridge Inbound Queue Pallet V2.
 #[cfg(feature = "snowbridge-pallet-inbound-queue-v2")]

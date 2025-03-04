@@ -19276,8 +19276,8 @@ dependencies = [
  "snowbridge-pallet-ethereum-client-fixtures 0.9.0",
  "snowbridge-pallet-inbound-queue 0.2.0",
  "snowbridge-pallet-inbound-queue-fixtures 0.10.0",
- "snowbridge-pallet-inbound-queue-fixtures-v2",
  "snowbridge-pallet-inbound-queue-v2",
+ "snowbridge-pallet-inbound-queue-v2-fixtures",
  "snowbridge-pallet-outbound-queue 0.2.0",
  "snowbridge-pallet-outbound-queue-v2",
  "snowbridge-pallet-system 0.2.0",
@@ -25724,18 +25724,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "snowbridge-pallet-inbound-queue-fixtures-v2"
-version = "0.10.0"
-dependencies = [
- "hex-literal",
- "snowbridge-beacon-primitives 0.2.0",
- "snowbridge-core 0.2.0",
- "snowbridge-inbound-queue-primitives",
- "sp-core 28.0.0",
- "sp-std 14.0.0",
-]
-
-[[package]]
 name = "snowbridge-pallet-inbound-queue-v2"
 version = "0.2.0"
 dependencies = [
@@ -25755,7 +25743,7 @@ dependencies = [
  "snowbridge-core 0.2.0",
  "snowbridge-inbound-queue-primitives",
  "snowbridge-pallet-ethereum-client 0.2.0",
- "snowbridge-pallet-inbound-queue-fixtures-v2",
+ "snowbridge-pallet-inbound-queue-v2-fixtures",
  "snowbridge-test-utils",
  "sp-core 28.0.0",
  "sp-io 30.0.0",
@@ -25766,6 +25754,18 @@ dependencies = [
  "staging-xcm-builder 7.0.0",
  "staging-xcm-executor 7.0.0",
  "tracing",
+]
+
+[[package]]
+name = "snowbridge-pallet-inbound-queue-v2-fixtures"
+version = "0.10.0"
+dependencies = [
+ "hex-literal",
+ "snowbridge-beacon-primitives 0.2.0",
+ "snowbridge-core 0.2.0",
+ "snowbridge-inbound-queue-primitives",
+ "sp-core 28.0.0",
+ "sp-std 14.0.0",
 ]
 
 [[package]]
