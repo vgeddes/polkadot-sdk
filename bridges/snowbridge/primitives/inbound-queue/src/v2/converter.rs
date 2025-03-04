@@ -14,7 +14,6 @@ use xcm::{
 	prelude::{Junction::*, *},
 	MAX_XCM_DECODE_DEPTH,
 };
-
 use super::{message::*, traits::*};
 use crate::{CallIndex, EthereumLocationsConverterFor};
 use sp_runtime::MultiAddress;
@@ -166,11 +165,11 @@ where
 		Ok(prepared_message)
 	}
 
-    /// Construct the remote XCM needed to create a new asset in the `ForeignAssets` pallet
-    /// on AssetHub (Polkadot or Kusama).
-    fn make_create_asset_xcm(
+	/// Construct the remote XCM needed to create a new asset in the `ForeignAssets` pallet
+	/// on AssetHub (Polkadot or Kusama).
+	fn make_create_asset_xcm(
 		token: &H160,
-		network: u8,
+		network: super::message::Network,
 		eth_value: u128,
 	) -> Result<Xcm<()>, ConvertMessageError> {
 		let chain_id = match EthereumNetwork::get() {
@@ -196,14 +195,13 @@ where
 		);
 
 		match network {
-			0 => Ok(Self::make_create_asset_xcm_for_polkadot(
+			super::message::Network::Polkadot => Ok(Self::make_create_asset_xcm_for_polkadot(
 				create_call_index,
 				asset_id,
 				bridge_owner,
 				dot_fee,
 				eth_asset,
 			)),
-			_ => Err(ConvertMessageError::InvalidNetwork),
 		}
 	}
 

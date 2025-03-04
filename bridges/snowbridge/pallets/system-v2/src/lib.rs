@@ -55,6 +55,8 @@ pub use pallet::*;
 pub type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
 
 #[cfg(feature = "runtime-benchmarks")]
+use frame_support::traits::OriginTrait;
+#[cfg(feature = "runtime-benchmarks")]
 pub trait BenchmarkHelper<O>
 where
 	O: OriginTrait,
@@ -105,11 +107,16 @@ pub mod pallet {
 
 	#[pallet::error]
 	pub enum Error<T> {
+		/// Location could not be reachored
 		LocationReanchorFailed,
+		/// A token location could not be converted to a token ID.
 		LocationConversionFailed,
+		/// A `VersionedLocation` could not be converted into a `Location`.
 		UnsupportedLocationVersion,
-		InvalidLocation,
+		/// An XCM could not be sent, due to a `SendError`.
 		Send(SendError),
+		/// The gateway contract upgrade message could not be sent due to invalid upgrade
+		/// parameters.
 		InvalidUpgradeParameters,
 	}
 
@@ -157,7 +164,7 @@ pub mod pallet {
 		///
 		/// Fee required: No
 		///
-		/// - `origin`: Must be `Root`
+		/// - `origin`: Must be `GovernanceOrigin`
 		#[pallet::call_index(4)]
 		#[pallet::weight((<T as pallet::Config>::WeightInfo::set_operating_mode(), DispatchClass::Operational))]
 		pub fn set_operating_mode(origin: OriginFor<T>, mode: OperatingMode) -> DispatchResult {
