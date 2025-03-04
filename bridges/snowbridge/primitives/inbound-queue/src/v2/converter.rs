@@ -20,6 +20,9 @@ use sp_runtime::MultiAddress;
 
 const MINIMUM_DEPOSIT: u128 = 1;
 
+/// Topic prefix used for generating unique identifiers for messages
+const INBOUND_QUEUE_TOPIC_PREFIX: &str = "SnowbridgeInboundQueueV2";
+
 /// Representation of an intermediate parsed message, before final
 /// conversion to XCM.
 #[derive(Clone, RuntimeDebug)]
@@ -151,7 +154,7 @@ where
 			}
 		}
 
-		let topic = blake2_256(&("SnowbridgeInboundQueueV2", message.nonce).encode());
+		let topic = blake2_256(&(INBOUND_QUEUE_TOPIC_PREFIX, message.nonce).encode());
 
 		let prepared_message = PreparedMessage {
 			origin: message.origin.clone(),
@@ -297,7 +300,6 @@ where
 			DescendOrigin(InboundQueueLocation::get()),
 			UniversalOrigin(GlobalConsensus(network)),
 			ReserveAssetDeposited(message.execution_fee.clone().into()),
-			PayFees { asset: message.execution_fee.clone() },
 		];
 
 		// Make the origin account on AH the default claimer. This account can transact
@@ -314,11 +316,15 @@ where
 
 		let claimer = message.claimer.unwrap_or(default_claimer);
 
+		// Set claimer before PayFees, in case the fees are not enough. Then the claimer will be
+		// able to claim the funds still.
 		instructions.push(SetHints {
 			hints: vec![AssetClaimer { location: claimer.clone() }]
 				.try_into()
 				.expect("checked statically, qed"),
 		});
+
+		instructions.push(PayFees { asset: message.execution_fee.clone() });
 
 		let mut reserve_deposit_assets = vec![];
 		let mut reserve_withdraw_assets = vec![];
@@ -436,7 +442,6 @@ mod tests {
 			EthereumAsset::ForeignTokenERC20 { token_id: foreign_token_id, value: token_value },
 		];
 		let instructions = vec![
-			RefundSurplus,
 			DepositAsset { assets: Wild(AllCounted(1).into()), beneficiary: beneficiary.clone() },
 		];
 		let xcm: Xcm<()> = instructions.into();
@@ -560,8 +565,8 @@ mod tests {
 		assert!(reserve_deposited_found == 2);
 		// Expecting one WithdrawAsset for the foreign ERC-20
 		assert!(withdraw_assets_found == 1);
-		// One added by the user, one appended to the message in the converter.
-		assert!(refund_surplus_found == 2);
+		// Appended to the message in the converter.
+		assert!(refund_surplus_found == 1);
 		// Deposit asset added by the converter and user
 		assert!(deposit_asset_found == 2);
 	}
@@ -673,7 +678,6 @@ mod tests {
 		let assets = vec![EthereumAsset::ForeignTokenERC20 { token_id, value: token_value }];
 		let instructions = vec![
 			DepositAsset { assets: Wild(AllCounted(1).into()), beneficiary },
-			SetTopic(message_id.into()),
 		];
 		let xcm: Xcm<()> = instructions.into();
 		let versioned_xcm = VersionedXcm::V5(xcm);
@@ -695,7 +699,7 @@ mod tests {
 			relayer_fee,
 		};
 
-		let result = Converter::convert(message);
+		let result = Converter::convert(message.clone());
 
 		// Invalid claimer does not break the message conversion
 		assert_ok!(result.clone());
@@ -741,6 +745,10 @@ mod tests {
 				// beneficiary is the relayer
 				beneficiary: Location::new(0, [AccountKey20 { network: None, key: origin.into() }])
 			})
+		);
+		assert_eq!(
+			last,
+			Some(SetTopic(blake2_256(&(INBOUND_QUEUE_TOPIC_PREFIX, message.nonce).encode())))
 		);
 	}
 
