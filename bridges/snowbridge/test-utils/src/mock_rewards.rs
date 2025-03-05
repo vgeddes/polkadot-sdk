@@ -1,51 +1,58 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2023 Snowfork <hello@snowfork.com>
-use codec::Decode;
-use codec::Encode;
-use codec::MaxEncodedLen;
+use bp_relayers::{PaymentProcedure, RewardLedger, RewardsAccountOwner, RewardsAccountParams};
+use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
+use frame_support::{pallet_prelude::DispatchResult, sp_runtime};
 use scale_info::TypeInfo;
-use frame_support::sp_runtime;
-use frame_support::pallet_prelude::DispatchResult;
 use xcm::opaque::latest::Location;
-use bp_relayers::{PaymentProcedure, RewardsAccountOwner, RewardsAccountParams};
-use bp_relayers::RewardLedger;
 
 /// Showcasing that we can handle multiple different rewards with the same pallet.
-#[derive(Clone, Copy, Debug, Decode, Encode, Eq, MaxEncodedLen, PartialEq, TypeInfo)]
+#[derive(
+	Clone,
+	Copy,
+	Debug,
+	Decode,
+	DecodeWithMemTracking,
+	Encode,
+	Eq,
+	MaxEncodedLen,
+	PartialEq,
+	TypeInfo,
+)]
 pub enum BridgeReward {
-    /// Rewards for Snowbridge.
-    Snowbridge,
+	/// Rewards for Snowbridge.
+	Snowbridge,
 }
 
 pub struct MockPaymentProcedure;
 
 // Provide a no-op or mock implementation for the required trait
 impl PaymentProcedure<sp_runtime::AccountId32, RewardsAccountParams<u64>, u128>
-for MockPaymentProcedure
+	for MockPaymentProcedure
 {
-    type Error = DispatchResult;
-    type Beneficiary = Location;
-    fn pay_reward(
-        _who: &sp_runtime::AccountId32,
-        _reward_params: bp_relayers::RewardsAccountParams<u64>,
-        _reward_balance: u128,
-        _beneficiary: Self::Beneficiary,
-    ) -> Result<(), Self::Error> {
-        Ok(())
-    }
+	type Error = DispatchResult;
+	type Beneficiary = Location;
+	fn pay_reward(
+		_who: &sp_runtime::AccountId32,
+		_reward_params: bp_relayers::RewardsAccountParams<u64>,
+		_reward_balance: u128,
+		_beneficiary: Self::Beneficiary,
+	) -> Result<(), Self::Error> {
+		Ok(())
+	}
 }
 
 impl From<BridgeReward> for RewardsAccountParams<u64> {
-    fn from(_bridge_reward: BridgeReward) -> Self {
-        RewardsAccountParams::new(1, [0; 4], RewardsAccountOwner::ThisChain)
-    }
+	fn from(_bridge_reward: BridgeReward) -> Self {
+		RewardsAccountParams::new(1, [0; 4], RewardsAccountOwner::ThisChain)
+	}
 }
 
 impl RewardLedger<sp_runtime::AccountId32, BridgeReward, u128> for () {
-    fn register_reward(
-        _relayer: &sp_runtime::AccountId32,
-        _reward: BridgeReward,
-        _reward_balance: u128,
-    ) {
-    }
+	fn register_reward(
+		_relayer: &sp_runtime::AccountId32,
+		_reward: BridgeReward,
+		_reward_balance: u128,
+	) {
+	}
 }

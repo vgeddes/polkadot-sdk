@@ -3,7 +3,6 @@
 use super::*;
 
 use crate::{self as inbound_queue_v2};
-use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use frame_support::{
 	derive_impl, parameter_types,
 	traits::ConstU32,
@@ -160,33 +159,6 @@ parameter_types! {
 	pub const CreateAssetCall: [u8;2] = [53, 0];
 	pub const CreateAssetDeposit: u128 = 10_000_000_000u128;
     pub const SnowbridgeReward: BridgeReward = BridgeReward::Snowbridge;
-}
-
-/// Showcasing that we can handle multiple different rewards with the same pallet.
-#[derive(
-	Clone,
-	Copy,
-	Debug,
-	Decode,
-	Encode,
-	DecodeWithMemTracking,
-	Eq,
-	MaxEncodedLen,
-	PartialEq,
-	TypeInfo,
-)]
-pub enum BridgeReward {
-	/// Rewards for Snowbridge.
-	Snowbridge,
-}
-
-impl RewardLedger<<mock::Test as frame_system::Config>::AccountId, BridgeReward, u128> for () {
-	fn register_reward(
-		_relayer: &<mock::Test as frame_system::Config>::AccountId,
-		_reward: BridgeReward,
-		_reward_balance: u128,
-	) {
-	}
 }
 
 impl inbound_queue_v2::Config for Test {

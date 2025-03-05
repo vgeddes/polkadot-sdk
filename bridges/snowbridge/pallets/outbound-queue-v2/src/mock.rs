@@ -9,7 +9,6 @@ use frame_support::{
 	BoundedVec,
 };
 
-use codec::{DecodeWithMemTracking, Encode, MaxEncodedLen};
 use bp_relayers::RewardsAccountParams;
 use hex_literal::hex;
 use snowbridge_core::{
@@ -127,33 +126,6 @@ parameter_types! {
 }
 
 pub const DOT: u128 = 10_000_000_000;
-
-/// Showcasing that we can handle multiple different rewards with the same pallet.
-#[derive(
-	Clone,
-	Copy,
-	Debug,
-	Decode,
-	DecodeWithMemTracking,
-	Encode,
-	Eq,
-	MaxEncodedLen,
-	PartialEq,
-	TypeInfo,
-)]
-pub enum BridgeReward {
-	/// Rewards for Snowbridge.
-	Snowbridge,
-}
-
-impl RewardLedger<<mock::Test as frame_system::Config>::AccountId, BridgeReward, u128> for () {
-	fn register_reward(
-		_relayer: &<mock::Test as frame_system::Config>::AccountId,
-		_reward: BridgeReward,
-		_reward_balance: u128,
-	) {
-	}
-}
 
 impl crate::Config for Test {
 	type RuntimeEvent = RuntimeEvent;

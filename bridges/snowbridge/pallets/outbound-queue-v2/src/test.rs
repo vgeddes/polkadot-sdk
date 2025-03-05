@@ -274,6 +274,6 @@ fn test_add_tip_fails_no_pending_order() {
 	new_tester().execute_with(|| {
 		let nonce = 42;
 		let amount = 1000;
-		assert_noop!(OutboundQueue::add_tip(nonce, amount), AddTipError::NonceConsumed);
+		assert_noop!(OutboundQueue::add_tip(nonce, amount), AddTipError::UnknownMessage);
 	});
 }
