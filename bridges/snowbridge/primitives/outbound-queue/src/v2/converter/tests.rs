@@ -1124,6 +1124,8 @@ fn test_describe_asset_hub() {
 		legacy_agent_id,
 		hex!("81c5ab2571199e3188135178f3c2c8e2d268be1313d029b30f534fa579b69b79").into()
 	);
+	let agent_id = AgentIdOf::convert_location(&legacy_location).unwrap();
+	assert_eq!(agent_id, legacy_agent_id);
 	let location: Location = Location::new(1, [GlobalConsensus(Polkadot), Parachain(1000)]);
 	let agent_id = AgentIdOf::convert_location(&location).unwrap();
 	assert_eq!(

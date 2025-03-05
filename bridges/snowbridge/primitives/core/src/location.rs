@@ -112,7 +112,7 @@ impl DescribeLocation for DescribeSnowbridgeTerminal {
 
 #[cfg(test)]
 mod tests {
-	use crate::{LocationHashOf, TokenIdOf};
+	use crate::{AgentIdOf, LocationHashOf, TokenIdOf};
 	use xcm::{
 		latest::WESTEND_GENESIS_HASH,
 		prelude::{
@@ -123,7 +123,7 @@ mod tests {
 	use xcm_executor::traits::ConvertLocation;
 
 	#[test]
-	fn test_token_of_id() {
+	fn test_token_id_fully_compatible() {
 		let token_locations = [
 			// Relay Chain cases
 			// Relay Chain relative to Ethereum
@@ -241,6 +241,29 @@ mod tests {
 				TokenIdOf::convert_location(&token).is_none(),
 				"Invalid token = {token:?} yields a TokenId."
 			);
+		}
+	}
+
+	#[test]
+	fn test_agent_id_fully_compatible() {
+		// Agent locations in V1 are not reanchored
+		let agent_locations = [
+			// asset hub
+			Location::new(1, [Parachain(2000)]),
+			// relay chain
+			Location::new(1, []),
+			// here
+			Location::new(0, []),
+		];
+
+		for location in agent_locations {
+			let agent_id = AgentIdOf::convert_location(&location).unwrap();
+			let agent_id_v2 = LocationHashOf::convert_location(&location).unwrap();
+			// which means V2 is not compatible with V1
+			if agent_id != agent_id_v2 {
+				println!("agentId in V2 is not compatible with V1: {:?}", location)
+			}
+			assert_eq!(agent_id, agent_id_v2);
 		}
 	}
 }
