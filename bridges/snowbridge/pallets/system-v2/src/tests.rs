@@ -3,6 +3,7 @@
 use crate::{mock::*, DispatchError::BadOrigin, *};
 use frame_support::{assert_noop, assert_ok};
 use hex_literal::hex;
+use snowbridge_core::TokenIdOf;
 use sp_keyring::sr25519::Keyring;
 use xcm::{latest::WESTEND_GENESIS_HASH, prelude::*};
 
@@ -119,6 +120,13 @@ fn register_all_tokens_succeeds() {
 		RegisterTokenTestCase {
 			native: Location::new(2, [GlobalConsensus(Kusama), Parachain(2000)]),
 		},
+		// Parachain token from PalletInstance
+		RegisterTokenTestCase {
+			native: Location::new(
+				2,
+				[GlobalConsensus(Kusama), Parachain(2000), PalletInstance(50)],
+			),
+		},
 	];
 	for tc in test_cases.iter() {
 		new_test_ext(true).execute_with(|| {
@@ -135,6 +143,8 @@ fn register_all_tokens_succeeds() {
 			let reanchored_location = EthereumSystemV2::reanchor(&tc.native).unwrap();
 			let foreign_token_id =
 				EthereumSystemV2::location_to_message_origin(&tc.native).unwrap();
+			let foreign_token_id_v1 = TokenIdOf::convert_location(&reanchored_location).unwrap();
+			assert_eq!(foreign_token_id, foreign_token_id_v1);
 
 			assert_eq!(
 				NativeToForeignId::<Test>::get(reanchored_location.clone()),
