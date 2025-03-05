@@ -169,16 +169,7 @@ fn register_all_tokens_succeeds() {
 fn register_ethereum_native_token_fails() {
 	new_test_ext(true).execute_with(|| {
 		let origin = make_xcm_origin(Location::new(1, [Parachain(1000)]));
-		let location = Location::new(
-			2,
-			[
-				GlobalConsensus(Ethereum { chain_id: 11155111 }),
-				AccountKey20 {
-					network: None,
-					key: hex!("87d1f7fdfEe7f651FaBc8bFCB6E086C278b77A7d"),
-				},
-			],
-		);
+		let location = Location::new(2, [GlobalConsensus(Ethereum { chain_id: 11155111 })]);
 		let versioned_location: Box<VersionedLocation> = Box::new(location.clone().into());
 		assert_noop!(
 			EthereumSystemV2::register_token(
