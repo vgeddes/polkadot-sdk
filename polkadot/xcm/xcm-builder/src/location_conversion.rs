@@ -135,7 +135,7 @@ impl DescribeLocation for DescribePalletInstanceThenGeneralIndexTerminal {
 	fn describe_location(l: &Location) -> Option<Vec<u8>> {
 		match l.unpack() {
 			(0, [PalletInstance(instance), GeneralIndex(index)]) =>
-				Some((b"PalletInstance", *instance, b"GeneralIndex", *index).encode()),
+				Some((b"Pallet", *instance, b"GeneralIndex", *index).encode()),
 			_ => return None,
 		}
 	}
@@ -146,7 +146,7 @@ impl DescribeLocation for DescribePalletInstanceThenGeneralKeyTerminal {
 	fn describe_location(l: &Location) -> Option<Vec<u8>> {
 		match l.unpack() {
 			(0, [PalletInstance(instance), GeneralKey { data, .. }]) =>
-				Some((b"PalletInstance", *instance, b"GeneralKey", *data).encode()),
+				Some((b"Pallet", *instance, b"GeneralKey", *data).encode()),
 			_ => return None,
 		}
 	}
@@ -157,7 +157,7 @@ impl DescribeLocation for DescribePalletInstanceThenAccountId32Terminal {
 	fn describe_location(l: &Location) -> Option<Vec<u8>> {
 		match l.unpack() {
 			(0, [PalletInstance(instance), AccountId32 { id, .. }]) =>
-				Some((b"PalletInstance", *instance, b"AccountId32", *id).encode()),
+				Some((b"Pallet", *instance, b"AccountId32", *id).encode()),
 			_ => return None,
 		}
 	}
@@ -168,7 +168,7 @@ impl DescribeLocation for DescribePalletInstanceThenAccountKey20Terminal {
 	fn describe_location(l: &Location) -> Option<Vec<u8>> {
 		match l.unpack() {
 			(0, [PalletInstance(instance), AccountKey20 { key, .. }]) =>
-				Some((b"PalletInstance", *instance, b"AccountKey20", *key).encode()),
+				Some((b"Pallet", *instance, b"AccountKey20", *key).encode()),
 			_ => return None,
 		}
 	}
