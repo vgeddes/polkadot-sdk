@@ -231,7 +231,7 @@ pub fn add_tip_from_asset_hub_user_origin() {
 		type RuntimeOrigin = <AssetHubWestend as Chain>::RuntimeOrigin;
 
 		assert_ok!(<AssetHubWestend as AssetHubWestendPallet>::SnowbridgeSystemFrontend::add_tip(
-			RuntimeOrigin::signed(relayer),
+			RuntimeOrigin::signed(relayer.clone()),
 			tip_message_id.clone(),
 			xcm::prelude::Asset::from((dot, 1_000_000_000u128)),
 		));
@@ -244,8 +244,8 @@ pub fn add_tip_from_asset_hub_user_origin() {
 		assert!(
 			events.iter().any(|event| matches!(
 				event,
-				RuntimeEvent::EthereumSystemV2(snowbridge_pallet_system_v2::Event::TipAdded { message_id, success, ..})
-					if *message_id == tip_message_id.clone() && *success == true, // expect success
+				RuntimeEvent::EthereumSystemV2(snowbridge_pallet_system_v2::Event::TipProcessed { sender, message_id, success, ..})
+					if *sender == relayer && *message_id == tip_message_id.clone() && *success == true, // expect success
 			)),
 			"tip added event found"
 		);
@@ -283,8 +283,8 @@ pub fn tip_to_invalid_nonce_is_added_to_lost_tips() {
 		assert!(
 			events.iter().any(|event| matches!(
 				event,
-				RuntimeEvent::EthereumSystemV2(snowbridge_pallet_system_v2::Event::TipAdded { message_id, success, ..})
-					if *message_id == tip_message_id.clone() && *success == false, // expect a failure
+				RuntimeEvent::EthereumSystemV2(snowbridge_pallet_system_v2::Event::TipProcessed { sender, message_id, success, ..})
+					if *sender == relayer && *message_id == tip_message_id.clone() && *success == false, // expect a failure
 			)),
 			"tip added event found"
 		);

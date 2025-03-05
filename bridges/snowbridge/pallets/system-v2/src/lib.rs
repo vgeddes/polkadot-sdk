@@ -108,8 +108,11 @@ pub mod pallet {
 			/// ID of Polkadot-native token on Ethereum
 			foreign_token_id: H256,
 		},
-		/// A tip was added for an inbound or outbound message, for relayer incentivization.
-		TipAdded {
+		/// A tip was processed for an inbound or outbound message, for relayer incentivization.
+		/// It could have succeeded or failed (and then added to LostTips).
+		TipProcessed {
+			/// The original sender of the tip (who deposited the funds).
+			sender: AccountIdOf<T>,
 			/// The Inbound/Outbound message nonce
 			message_id: MessageId,
 			/// The tip amount in ether.
@@ -130,9 +133,12 @@ pub mod pallet {
 		InvalidUpgradeParameters,
 	}
 
-	/// Relayer reward tips that were added but the nonce was already consumed.
+	/// Relayer reward tips that were paid by the user to incentivize the processing of their
+	/// message, but then could not be added to their message reward (e.g. the nonce was already
+	/// processed or their order could not be found). Capturing the lost tips here supports
+	/// implementing a recovery method in the future.
 	#[pallet::storage]
-	pub type LostTips<T: Config> = StorageMap<_, Twox64Concat, AccountIdOf<T>, u128, ValueQuery>;
+	pub type LostTips<T: Config> = StorageMap<_, Blake2_256, AccountIdOf<T>, u128, ValueQuery>;
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
@@ -258,20 +264,18 @@ pub mod pallet {
 				Outbound(nonce) => <T as pallet::Config>::OutboundQueue::add_tip(nonce, amount),
 			};
 
-			Self::deposit_event(Event::<T>::TipAdded {
+			if let Err(_) = result {
+				LostTips::<T>::mutate(&sender, |lost_tip| {
+					*lost_tip = lost_tip.saturating_add(amount);
+				});
+			}
+
+			Self::deposit_event(Event::<T>::TipProcessed {
+				sender,
 				message_id,
 				amount,
 				success: result.is_ok(),
 			});
-
-			match result {
-				Ok(()) => (),
-				Err(_) => {
-					LostTips::<T>::mutate(&sender, |lost_tip| {
-						*lost_tip = lost_tip.saturating_add(amount);
-					});
-				},
-			}
 
 			Ok(())
 		}

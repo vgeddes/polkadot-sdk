@@ -31,6 +31,7 @@ use snowbridge_core::{
 	burn_for_teleport, operating_mode::ExportPausedQuery, reward::MessageId, AssetMetadata,
 	BasicOperatingMode,
 };
+use sp_runtime::traits::TryConvert;
 use sp_std::prelude::*;
 use xcm::{
 	latest::{validate_send, XcmHash},
@@ -117,6 +118,7 @@ pub mod pallet {
 
 		/// Weights for pallet dispatchables
 		type WeightInfo: WeightInfo;
+		type AccountToLocation: for<'a> TryConvert<&'a Self::AccountId, Location>;
 
 		/// A set of helper functions for benchmarking.
 		#[cfg(feature = "runtime-benchmarks")]
@@ -164,8 +166,12 @@ pub mod pallet {
 		UnsupportedAsset,
 		/// Unable to withdraw asset.
 		WithdrawError,
+		/// Account could not be converted to a location.
 		InvalidAccount,
+		/// Provided tip asset could not be swapped for ether.
 		SwapError,
+		/// Ether could not be burned.a
+		BurnError,
 	}
 
 	impl<T: Config> From<SendError> for Error<T> {
@@ -281,7 +287,8 @@ pub mod pallet {
 			let call = Self::build_add_tip_call(who.clone(), message_id.clone(), ether_gained);
 			let remote_xcm = Self::build_remote_xcm(&call);
 			let local_pallet_origin: Location = T::PalletLocation::get().into();
-			let who_location = Self::account_to_location(who)?;
+			let who_location =
+				T::AccountToLocation::try_convert(&who).map_err(|_| Error::<T>::InvalidAccount)?;
 
 			let xcm_message_id =
 				Self::send_xcm(local_pallet_origin, who_location, dest.clone(), remote_xcm.clone())
@@ -314,6 +321,9 @@ pub mod pallet {
 			T::XcmSender::deliver(ticket)
 		}
 
+		/// Swaps a specified tip asset to Ether and then burns the resulting ether for
+		/// teleportation. Returns the amount of Ether gained if successful, or a DispatchError if
+		/// any step fails.
 		fn swap_and_burn(
 			who: AccountIdOf<T>,
 			tip_asset_location: Location,
@@ -322,7 +332,8 @@ pub mod pallet {
 		) -> Result<u128, DispatchError> {
 			// Swap tip asset to ether
 			let swap_path = vec![tip_asset_location.clone(), ether_location.clone()];
-			let who_location = Self::account_to_location(who.clone())?;
+			let who_location =
+				T::AccountToLocation::try_convert(&who).map_err(|_| Error::<T>::InvalidAccount)?;
 
 			let ether_gained = T::Swap::swap_exact_tokens_for_tokens(
 				who.clone(),
@@ -335,13 +346,13 @@ pub mod pallet {
 			.map_err(|e| {
 				tracing::error!(target: LOG_TARGET, ?e, "swap error");
 				Error::<T>::SwapError
-			})?; // TODO show xcm error
+			})?;
 
 			// Burn the ether
 			let ether_asset = Asset::from((ether_location.clone(), ether_gained));
 
 			burn_for_teleport::<T::AssetTransactor>(&who_location, &ether_asset)
-				.map_err(|_| Error::<T>::SwapError)?; // TODO show xcm error
+				.map_err(|_| Error::<T>::BurnError)?;
 
 			Ok(ether_gained)
 		}
@@ -396,12 +407,6 @@ pub mod pallet {
 				.clone()
 				.reanchored(&T::BridgeHubLocation::get(), &T::UniversalLocation::get())
 				.map_err(|_| Error::<T>::LocationConversionFailed)
-		}
-
-		pub fn account_to_location(account: AccountIdOf<T>) -> Result<Location, Error<T>> {
-			let account_bytes: [u8; 32] =
-				account.encode().try_into().map_err(|_| Error::<T>::InvalidAccount)?;
-			Ok(Location::new(0, [AccountId32 { network: None, id: account_bytes }]))
 		}
 	}
 

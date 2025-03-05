@@ -11,9 +11,10 @@ use snowbridge_test_utils::mock_swap_executor::SwapExecutor;
 pub use snowbridge_test_utils::{mock_origin::pallet_xcm_origin, mock_xcm::*};
 use sp_core::H256;
 use sp_runtime::{
-	traits::{BlakeTwo256, IdentityLookup},
+	traits::{BlakeTwo256, IdentityLookup, TryConvert},
 	AccountId32, BuildStorage,
 };
+use std::marker::PhantomData;
 use xcm::prelude::*;
 
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -50,6 +51,15 @@ impl pallet_xcm_origin::Config for Test {
 	type RuntimeOrigin = RuntimeOrigin;
 }
 
+pub struct MockAccountLocationConverter<AccountId>(PhantomData<AccountId>);
+impl<'a, AccountId: Clone + Clone> TryConvert<&'a AccountId, Location>
+	for MockAccountLocationConverter<AccountId>
+{
+	fn try_convert(_who: &AccountId) -> Result<Location, &AccountId> {
+		Ok(Location::here())
+	}
+}
+
 #[cfg(feature = "runtime-benchmarks")]
 impl BenchmarkHelper<RuntimeOrigin> for () {
 	fn make_xcm_origin(location: Location) -> RuntimeOrigin {
@@ -84,6 +94,7 @@ impl crate::Config for Test {
 	type BackendWeightInfo = ();
 	type Swap = SwapExecutor;
 	type WeightInfo = ();
+	type AccountToLocation = MockAccountLocationConverter<AccountId>;
 	#[cfg(feature = "runtime-benchmarks")]
 	type Helper = ();
 }

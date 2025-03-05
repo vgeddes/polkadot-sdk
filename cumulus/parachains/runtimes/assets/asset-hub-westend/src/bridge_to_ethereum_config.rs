@@ -35,6 +35,7 @@ use frame_support::traits::{
 	ContainsPair, EitherOf, EnsureOrigin, EnsureOriginWithArg, OriginTrait,
 };
 use frame_system::EnsureRootWithSuccess;
+use crate::xcm_config::RelayNetwork;
 
 #[cfg(feature = "runtime-benchmarks")]
 pub mod benchmark_helpers {
@@ -104,6 +105,10 @@ impl snowbridge_pallet_system_frontend::Config for Runtime {
 	type UniversalLocation = UniversalLocation;
 	type PalletLocation = SystemFrontendPalletLocation;
 	type Swap = AssetConversion;
+	type AccountToLocation = xcm_builder::AliasesIntoAccountId32<
+		RelayNetwork,
+		<Runtime as frame_system::Config>::AccountId,
+	>;
 	type BackendWeightInfo = ();
 }
 

@@ -192,7 +192,8 @@ fn add_tip_inbound_succeeds() {
 
 		assert_ok!(EthereumSystemV2::add_tip(origin, sender.clone(), message_id.clone(), amount));
 
-		System::assert_last_event(RuntimeEvent::EthereumSystemV2(Event::<Test>::TipAdded {
+		System::assert_last_event(RuntimeEvent::EthereumSystemV2(Event::<Test>::TipProcessed {
+			sender: sender.clone(),
 			message_id,
 			amount,
 			success: true,
@@ -215,7 +216,8 @@ fn add_tip_inbound_fails_when_nonce_is_consumed() {
 
 		assert_ok!(EthereumSystemV2::add_tip(origin, sender.clone(), message_id.clone(), amount));
 
-		System::assert_last_event(RuntimeEvent::EthereumSystemV2(Event::<Test>::TipAdded {
+		System::assert_last_event(RuntimeEvent::EthereumSystemV2(Event::<Test>::TipProcessed {
+			sender: sender.clone(),
 			message_id,
 			amount,
 			success: false,
@@ -236,7 +238,8 @@ fn add_tip_outbound_succeeds() {
 
 		assert_ok!(EthereumSystemV2::add_tip(origin, sender.clone(), message_id.clone(), amount));
 
-		System::assert_last_event(RuntimeEvent::EthereumSystemV2(Event::<Test>::TipAdded {
+		System::assert_last_event(RuntimeEvent::EthereumSystemV2(Event::<Test>::TipProcessed {
+			sender: sender.clone(),
 			message_id,
 			amount,
 			success: true,
@@ -258,7 +261,8 @@ fn add_tip_outbound_fails_when_pending_order_not_found() {
 		let amount = 500;
 
 		assert_ok!(EthereumSystemV2::add_tip(origin, sender.clone(), message_id.clone(), amount));
-		System::assert_last_event(RuntimeEvent::EthereumSystemV2(Event::<Test>::TipAdded {
+		System::assert_last_event(RuntimeEvent::EthereumSystemV2(Event::<Test>::TipProcessed {
+			sender: sender.clone(),
 			message_id,
 			amount,
 			success: false,

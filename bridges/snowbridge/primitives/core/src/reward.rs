@@ -30,6 +30,7 @@ pub enum MessageId {
 #[derive(Debug, Encode, PartialEq, DecodeWithMemTracking, Decode, TypeInfo, PalletError)]
 pub enum AddTipError {
 	NonceConsumed,
+	UnknownMessage,
 }
 
 pub trait AddTip {

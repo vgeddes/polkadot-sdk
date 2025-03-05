@@ -420,7 +420,7 @@ pub mod pallet {
 						order.fee = order.fee.saturating_add(amount);
 						Ok(())
 					},
-					None => Err(AddTipError::NonceConsumed),
+					None => Err(AddTipError::UnknownMessage),
 				}
 			})
 		}

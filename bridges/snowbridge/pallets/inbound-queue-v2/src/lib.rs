@@ -211,7 +211,7 @@ pub mod pallet {
 
 	/// Keep track of tips added for a message as an additional relayer incentivization.
 	#[pallet::storage]
-	pub type Tips<T: Config> = StorageMap<_, Twox64Concat, u64, u128, ValueQuery>;
+	pub type Tips<T: Config> = StorageMap<_, Blake2_256, u64, u128, ValueQuery>;
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
