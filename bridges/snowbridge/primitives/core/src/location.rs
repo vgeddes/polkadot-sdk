@@ -247,8 +247,10 @@ mod tests {
 	#[test]
 	fn test_agent_id_fully_compatible() {
 		// Agent locations in V1 are not reanchored
-		let agent_locations = [
+		let legacy_agent_locations = [
 			// asset hub
+			Location::new(1, [Parachain(1000)]),
+			// acala
 			Location::new(1, [Parachain(2000)]),
 			// relay chain
 			Location::new(1, []),
@@ -256,7 +258,7 @@ mod tests {
 			Location::new(0, []),
 		];
 
-		for location in agent_locations {
+		for location in legacy_agent_locations {
 			let agent_id = AgentIdOf::convert_location(&location).unwrap();
 			let agent_id_v2 = LocationHashOf::convert_location(&location).unwrap();
 			// which means V2 is not compatible with V1
@@ -264,6 +266,109 @@ mod tests {
 				println!("agentId in V2 is not compatible with V1: {:?}", location)
 			}
 			assert_eq!(agent_id, agent_id_v2);
+		}
+
+		// Agent locations in V2 are reanchored, which is not supported by V1 converter
+		let agent_locations = [
+			// Relay Chain cases
+			// Relay Chain relative to Ethereum
+			Location::new(1, [GlobalConsensus(ByGenesis(WESTEND_GENESIS_HASH))]),
+			// Parachain cases
+			// Parachain relative to Ethereum
+			Location::new(1, [GlobalConsensus(ByGenesis(WESTEND_GENESIS_HASH)), Parachain(2000)]),
+			// Parachain general index
+			Location::new(
+				1,
+				[
+					GlobalConsensus(ByGenesis(WESTEND_GENESIS_HASH)),
+					Parachain(2000),
+					GeneralIndex(1),
+				],
+			),
+			// Parachain general key
+			Location::new(
+				1,
+				[
+					GlobalConsensus(ByGenesis(WESTEND_GENESIS_HASH)),
+					Parachain(2000),
+					GeneralKey { length: 32, data: [0; 32] },
+				],
+			),
+			// Parachain account key 20
+			Location::new(
+				1,
+				[
+					GlobalConsensus(ByGenesis(WESTEND_GENESIS_HASH)),
+					Parachain(2000),
+					AccountKey20 { network: None, key: [0; 20] },
+				],
+			),
+			// Parachain account id 32
+			Location::new(
+				1,
+				[
+					GlobalConsensus(ByGenesis(WESTEND_GENESIS_HASH)),
+					Parachain(2000),
+					AccountId32 { network: None, id: [0; 32] },
+				],
+			),
+			// Parchain Pallet instance cases
+			// Parachain pallet instance
+			Location::new(
+				1,
+				[
+					GlobalConsensus(ByGenesis(WESTEND_GENESIS_HASH)),
+					Parachain(2000),
+					PalletInstance(8),
+				],
+			),
+			// Parachain Pallet general index
+			Location::new(
+				1,
+				[
+					GlobalConsensus(ByGenesis(WESTEND_GENESIS_HASH)),
+					Parachain(2000),
+					PalletInstance(8),
+					GeneralIndex(1),
+				],
+			),
+			// Parachain Pallet general key
+			Location::new(
+				1,
+				[
+					GlobalConsensus(ByGenesis(WESTEND_GENESIS_HASH)),
+					Parachain(2000),
+					PalletInstance(8),
+					GeneralKey { length: 32, data: [0; 32] },
+				],
+			),
+			// Parachain Pallet account key 20
+			Location::new(
+				1,
+				[
+					GlobalConsensus(ByGenesis(WESTEND_GENESIS_HASH)),
+					Parachain(2000),
+					PalletInstance(8),
+					AccountKey20 { network: None, key: [0; 20] },
+				],
+			),
+			// Parachain Pallet account id 32
+			Location::new(
+				1,
+				[
+					GlobalConsensus(ByGenesis(WESTEND_GENESIS_HASH)),
+					Parachain(2000),
+					PalletInstance(8),
+					AccountId32 { network: None, id: [0; 32] },
+				],
+			),
+		];
+
+		for location in agent_locations {
+			let agent_id = AgentIdOf::convert_location(&location);
+			let agent_id_v2 = LocationHashOf::convert_location(&location);
+			assert_eq!(agent_id, None);
+			assert_ne!(agent_id_v2, None);
 		}
 	}
 }
