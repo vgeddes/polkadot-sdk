@@ -38,7 +38,7 @@ pub type TokenIdOf = HashedDescription<
 
 pub type LocationHashOf = HashedDescription<
 	H256,
-	(DescribeForEthereum<(DescribeTerminus, DescribeFamily<DescribeAllTerminal>)>,),
+	(DescribeForEthereum<(DescribeTerminus, DescribeFamily<DescribeTokenTerminal>)>,),
 >;
 
 /// This looks like DescribeTerminus that was added to xcm-builder. However this does an extra

@@ -1128,7 +1128,7 @@ fn test_describe_asset_hub() {
 	let agent_id = AgentIdOf::convert_location(&location).unwrap();
 	assert_eq!(
 		agent_id,
-		hex!("a044af074c000576cf668bc40e95f576e94359b9ad947591bbba5221dbe512d3").into()
+		hex!("aa16eddac8725928eaeda4aae518bf10d02bee80382517d21464a5cdf8d1d8e1").into()
 	)
 }
 
@@ -1171,7 +1171,7 @@ fn xcm_converter_transfer_native_token_success() {
 		Command::MintForeignToken { recipient: beneficiary_address.into(), amount, token_id };
 	let expected_message = Message {
 		id: [0; 32].into(),
-		origin: hex!("a044af074c000576cf668bc40e95f576e94359b9ad947591bbba5221dbe512d3").into(),
+		origin: hex!("aa16eddac8725928eaeda4aae518bf10d02bee80382517d21464a5cdf8d1d8e1").into(),
 		fee: 1000,
 		commands: BoundedVec::try_from(vec![expected_payload]).unwrap(),
 	};
