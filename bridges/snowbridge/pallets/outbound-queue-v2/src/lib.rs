@@ -38,15 +38,9 @@
 //! 	b. Fetch the pending order by nonce of the message, pay reward with fee attached in the order
 //!    	c. Remove the order from `PendingOrders` map storage by nonce
 //!
-//! # Message Priorities
-//!
-//! The processing of governance commands can never be halted. This effectively
-//! allows us to pause processing of normal user messages while still allowing
-//! governance commands to be sent to Ethereum.
 //!
 //! # Extrinsics
 //!
-//! * [`Call::set_operating_mode`]: Set the operating mode
 //! * [`Call::submit_delivery_proof`]: Submit delivery proof
 //!
 //! # Runtime API
@@ -316,10 +310,10 @@ pub mod pallet {
 			// a. Convert to OutboundMessage and save into Messages
 			// b. Convert to committed hash and save into MessageLeaves
 			// c. Save nonce&fee into PendingOrders
-			let message: Message = Message::decode(&mut message).map_err(|_| Corrupt)?;
-			let commands: Vec<OutboundCommandWrapper> = message
-				.commands
-				.clone()
+			let Message { origin, id, fee, commands } =
+				Message::decode(&mut message).map_err(|_| Corrupt)?;
+
+			let commands: Vec<OutboundCommandWrapper> = commands
 				.into_iter()
 				.map(|command| OutboundCommandWrapper {
 					kind: command.index(),
@@ -338,7 +332,7 @@ pub mod pallet {
 				})
 				.collect();
 			let committed_message = OutboundMessageWrapper {
-				origin: FixedBytes::from(message.origin.as_fixed_bytes()),
+				origin: FixedBytes::from(origin.as_fixed_bytes()),
 				nonce,
 				commands: abi_commands,
 			};
@@ -347,7 +341,7 @@ pub mod pallet {
 			MessageLeaves::<T>::append(message_abi_encoded_hash);
 
 			let outbound_message = OutboundMessage {
-				origin: message.origin,
+				origin,
 				nonce,
 				commands: commands.try_into().map_err(|_| Corrupt)?,
 			};
@@ -360,14 +354,14 @@ pub mod pallet {
 			// be resolved and the fee will be rewarded to the relayer.
 			let order = PendingOrder {
 				nonce,
-				fee: message.fee,
+				fee,
 				block_number: frame_system::Pallet::<T>::current_block_number(),
 			};
 			<PendingOrders<T>>::insert(nonce, order);
 
 			Nonce::<T>::set(nonce.checked_add(1).ok_or(Unsupported)?);
 
-			Self::deposit_event(Event::MessageAccepted { id: message.id, nonce });
+			Self::deposit_event(Event::MessageAccepted { id, nonce });
 
 			Ok(true)
 		}

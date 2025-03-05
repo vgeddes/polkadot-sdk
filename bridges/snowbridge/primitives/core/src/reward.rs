@@ -125,8 +125,8 @@ where
 			UniversalOrigin(GlobalConsensus(EthereumNetwork::get())),
 			ReserveAssetDeposited(total_assets.into()),
 			PayFees { asset: fee_asset },
-			DepositAsset { assets: AllCounted(1).into(), beneficiary },
 			RefundSurplus,
+			DepositAsset { assets: AllCounted(1).into(), beneficiary },
 		]
 		.into();
 
@@ -137,11 +137,6 @@ where
 
 		Ok(())
 	}
-}
-
-/// XCM asset descriptor for native ether relative to AH
-pub fn ether_asset(network: NetworkId, value: u128) -> Asset {
-	(Location::new(2, [GlobalConsensus(network)]), value).into()
 }
 
 #[cfg(test)]
