@@ -1,5 +1,5 @@
 [package]
-name = "snowbridge-system-runtime-api-v2"
+name = "snowbridge-system-v2-runtime-api"
 description = "Snowbridge System Runtime API V2"
 version = "0.2.0"
 authors = ["Snowfork <contact@snowfork.com>"]
@@ -13,6 +13,9 @@ workspace = true
 
 [package.metadata.docs.rs]
 targets = ["x86_64-unknown-linux-gnu"]
+
+[package.metadata.polkadot-sdk]
+exclude-from-umbrella = true
 
 [dependencies]
 codec = { features = [

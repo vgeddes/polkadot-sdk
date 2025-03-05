@@ -19,6 +19,8 @@ use xcm::{
 	prelude::{ExecuteXcm, Junction::*, Location, SendXcm, *},
 };
 
+/// Describes the message that the tip should be added to (either Inbound or Outbound message) and
+/// the message nonce.
 #[derive(Debug, Clone, PartialEq, Encode, Decode, DecodeWithMemTracking, TypeInfo)]
 pub enum MessageId {
 	/// Message from Ethereum
@@ -33,14 +35,18 @@ pub enum AddTipError {
 	UnknownMessage,
 }
 
+/// Trait to add a tip for a nonce.
 pub trait AddTip {
 	/// Add a relayer reward tip to a pallet.
 	fn add_tip(nonce: u64, amount: u128) -> Result<(), AddTipError>;
 }
 
+/// Error related to paying out relayer rewards.
 #[derive(Debug, Encode, Decode)]
 pub enum RewardPaymentError {
+	/// The XCM to mint the reward on AssetHub could not be sent.
 	XcmSendFailure,
+	/// The delivery fee to send the XCM could not be charged.
 	ChargeFeesFailure,
 }
 
@@ -145,8 +151,8 @@ where
 			UniversalOrigin(GlobalConsensus(EthereumNetwork::get())),
 			ReserveAssetDeposited(total_assets.into()),
 			PayFees { asset: fee_asset },
-			DepositAsset { assets: AllCounted(1).into(), beneficiary },
 			RefundSurplus,
+			DepositAsset { assets: AllCounted(1).into(), beneficiary },
 		]
 		.into();
 
@@ -157,11 +163,6 @@ where
 
 		Ok(())
 	}
-}
-
-/// XCM asset descriptor for native ether relative to AH
-pub fn ether_asset(network: NetworkId, value: u128) -> Asset {
-	(Location::new(2, [GlobalConsensus(network)]), value).into()
 }
 
 #[cfg(test)]

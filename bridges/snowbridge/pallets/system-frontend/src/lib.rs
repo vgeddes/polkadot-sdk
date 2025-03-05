@@ -3,7 +3,7 @@
 //!
 //! System frontend pallet that acts as the user-facing controlplane for Snowbridge.
 //!
-//! Some operations are delegated to a backend pallet installed a remote parachain.
+//! Some operations are delegated to a backend pallet installed on a remote parachain.
 //!
 //! # Extrinsics
 //!
@@ -38,6 +38,9 @@ use xcm::{
 	prelude::*,
 };
 use xcm_executor::traits::{FeeManager, FeeReason, TransactAsset};
+
+#[cfg(feature = "runtime-benchmarks")]
+use frame_support::traits::OriginTrait;
 
 pub use pallet::*;
 pub type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
@@ -128,7 +131,7 @@ pub mod pallet {
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
-		/// A XCM message was sent
+		/// An XCM was sent
 		MessageSent {
 			origin: Location,
 			destination: Location,

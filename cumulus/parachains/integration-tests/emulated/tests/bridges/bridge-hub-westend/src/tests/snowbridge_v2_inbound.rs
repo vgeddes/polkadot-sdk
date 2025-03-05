@@ -31,13 +31,10 @@ use emulated_integration_tests_common::{RESERVABLE_ASSET_ID, WETH};
 use hex_literal::hex;
 use rococo_westend_system_emulated_network::penpal_emulated_chain::PARA_ID_B;
 use snowbridge_core::{reward::MessageId, AssetMetadata, TokenIdOf};
-use snowbridge_inbound_queue_primitives::{
-	v2::{
-		EthereumAsset::{ForeignTokenERC20, NativeTokenERC20},
-		Message, XcmPayload,
-	},
-	EthereumLocationsConverterFor,
-};
+use snowbridge_inbound_queue_primitives::v2::{{
+	EthereumAsset::{ForeignTokenERC20, NativeTokenERC20},
+	Message, Network, XcmPayload,
+}, EthereumLocationsConverterFor};
 use snowbridge_pallet_system_v2::LostTips;
 use sp_core::{H160, H256};
 use sp_runtime::MultiAddress;
@@ -77,7 +74,7 @@ fn register_token_v2() {
 			nonce: 1,
 			origin,
 			assets: vec![],
-			xcm: XcmPayload::CreateAsset { token, network: 0 },
+			xcm: XcmPayload::CreateAsset { token, network: Network::Polkadot },
 			claimer: Some(claimer_bytes),
 			// Used to pay the asset creation deposit.
 			value: 9_000_000_000_000u128,
@@ -361,7 +358,7 @@ fn register_and_send_multiple_tokens_v2() {
 	let token: H160 = TOKEN_ID.into();
 	let token_location = erc20_token_location(token);
 
-	let bridge_owner = EthereumLocationsConverterFor::<[u8; 32]>::from_chain_id(&CHAIN_ID);
+	let bridge_owner = snowbridge_sovereign();
 
 	let beneficiary_acc_id: H256 = H256::random();
 	let beneficiary_acc_bytes: [u8; 32] = beneficiary_acc_id.into();
@@ -404,7 +401,7 @@ fn register_and_send_multiple_tokens_v2() {
 				want: dot_fee.clone().into(),
 				maximal: false,
 			},
-			DepositAsset { assets: dot_fee.into(), beneficiary: bridge_owner.into() },
+			DepositAsset { assets: dot_fee.into(), beneficiary: bridge_owner.clone().into() },
 			// register new token
 			Transact {
 				origin_kind: OriginKind::Xcm,
@@ -755,9 +752,6 @@ fn send_foreign_erc20_token_back_to_polkadot() {
 	)
 	.appended_with(asset_id.clone().interior)
 	.unwrap();
-
-	let ethereum_destination = Location::new(2, [GlobalConsensus(Ethereum { chain_id: CHAIN_ID })]);
-
 	// Register token
 	BridgeHubWestend::execute_with(|| {
 		type RuntimeOrigin = <BridgeHubWestend as Chain>::RuntimeOrigin;
@@ -773,10 +767,8 @@ fn send_foreign_erc20_token_back_to_polkadot() {
 		));
 	});
 
-	let ethereum_sovereign: AccountId =
-		EthereumLocationsConverterFor::<[u8; 32]>::convert_location(&ethereum_destination)
-			.unwrap()
-			.into();
+	let ethereum_sovereign: AccountId = snowbridge_sovereign();
+
 	AssetHubWestend::fund_accounts(vec![(ethereum_sovereign.clone(), INITIAL_FUND)]);
 
 	// Mint the asset into the bridge sovereign account, to mimic locked funds
@@ -1007,6 +999,11 @@ fn invalid_claimer_does_not_fail_the_message() {
 					asset_id: *asset_id == weth_location(),
 					owner: *owner == beneficiary_acc.into(),
 				},
+				// Leftover fees deposited into Snowbridge Sovereign
+				RuntimeEvent::ForeignAssets(pallet_assets::Event::Issued { asset_id, owner, .. }) => {
+					asset_id: *asset_id == eth_location(),
+					owner: *owner == snowbridge_sovereign().into(),
+				},
 			]
 		);
 
@@ -1014,16 +1011,6 @@ fn invalid_claimer_does_not_fail_the_message() {
 		assert_eq!(
 			ForeignAssets::balance(weth_location(), AccountId::from(beneficiary_acc)),
 			token_transfer_value
-		);
-
-		let events = AssetHubWestend::events();
-		// Check that assets were trapped due to the invalid claimer.
-		assert!(
-			events.iter().any(|event| matches!(
-				event,
-				RuntimeEvent::PolkadotXcm(pallet_xcm::Event::AssetsTrapped { .. })
-			)),
-			"Assets were trapped, should not happen."
 		);
 	});
 }

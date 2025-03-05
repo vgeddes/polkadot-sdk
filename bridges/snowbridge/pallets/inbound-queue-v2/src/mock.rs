@@ -3,6 +3,7 @@
 use super::*;
 
 use crate::{self as inbound_queue_v2};
+use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use frame_support::{
 	derive_impl, parameter_types,
 	traits::ConstU32,
@@ -36,6 +37,8 @@ frame_support::construct_runtime!(
 		BridgeRelayers: pallet_bridge_relayers,
 	}
 );
+
+pub(crate) const ERROR_ADDRESS: [u8; 20] = hex!("0000000000000000000000000000000000000911");
 
 pub type AccountId = sp_runtime::AccountId32;
 type Balance = u128;
@@ -110,7 +113,7 @@ pub struct MockVerifier;
 
 impl Verifier for MockVerifier {
 	fn verify(log: &Log, _: &Proof) -> Result<(), VerificationError> {
-		if log.address == hex!("0000000000000000000000000000000000000911").into() {
+		if log.address == ERROR_ADDRESS.into() {
 			return Err(VerificationError::InvalidProof)
 		}
 		Ok(())
@@ -156,7 +159,34 @@ parameter_types! {
 	pub DefaultMyRewardKind: BridgeReward = BridgeReward::Snowbridge;
 	pub const CreateAssetCall: [u8;2] = [53, 0];
 	pub const CreateAssetDeposit: u128 = 10_000_000_000u128;
-	pub const SnowbridgeReward: BridgeReward = BridgeReward::Snowbridge;
+    pub const SnowbridgeReward: BridgeReward = BridgeReward::Snowbridge;
+}
+
+/// Showcasing that we can handle multiple different rewards with the same pallet.
+#[derive(
+	Clone,
+	Copy,
+	Debug,
+	Decode,
+	Encode,
+	DecodeWithMemTracking,
+	Eq,
+	MaxEncodedLen,
+	PartialEq,
+	TypeInfo,
+)]
+pub enum BridgeReward {
+	/// Rewards for Snowbridge.
+	Snowbridge,
+}
+
+impl RewardLedger<<mock::Test as frame_system::Config>::AccountId, BridgeReward, u128> for () {
+	fn register_reward(
+		_relayer: &<mock::Test as frame_system::Config>::AccountId,
+		_reward: BridgeReward,
+		_reward_balance: u128,
+	) {
+	}
 }
 
 impl inbound_queue_v2::Config for Test {

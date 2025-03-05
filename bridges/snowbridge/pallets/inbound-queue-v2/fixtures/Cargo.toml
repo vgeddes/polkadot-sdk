@@ -1,5 +1,5 @@
 [package]
-name = "snowbridge-pallet-inbound-queue-fixtures-v2"
+name = "snowbridge-pallet-inbound-queue-v2-fixtures"
 description = "Snowbridge Inbound Queue Test Fixtures V2"
 version = "0.10.0"
 authors = ["Snowfork <contact@snowfork.com>"]
@@ -13,6 +13,9 @@ workspace = true
 
 [package.metadata.docs.rs]
 targets = ["x86_64-unknown-linux-gnu"]
+
+[package.metadata.polkadot-sdk]
+exclude-from-umbrella = true
 
 [dependencies]
 hex-literal = { workspace = true, default-features = true }

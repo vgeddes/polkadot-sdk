@@ -36,7 +36,7 @@ pub const INITIAL_FUND: u128 = 50_000_000_000_000;
 pub const ETHEREUM_DESTINATION_ADDRESS: [u8; 20] = hex!("44a57ee2f2FCcb85FDa2B0B18EBD0D8D2333700e");
 pub const AGENT_ADDRESS: [u8; 20] = hex!("90A987B944Cb1dCcE5564e5FDeCD7a54D3de27Fe");
 pub const TOKEN_AMOUNT: u128 = 10_000_000_000_000;
-pub const REMOTE_FEE_AMOUNT_IN_ETHER: u128 = 400_000_000_000;
+pub const REMOTE_FEE_AMOUNT_IN_ETHER: u128 = 600_000_000_000;
 pub const LOCAL_FEE_AMOUNT_IN_DOT: u128 = 800_000_000_000;
 
 pub const EXECUTION_WEIGHT: u64 = 8_000_000_000;
@@ -82,13 +82,7 @@ pub fn register_relay_token_on_bh() {
 }
 
 pub fn register_assets_on_penpal() {
-	let ethereum_sovereign: AccountId =
-		EthereumLocationsConverterFor::<[u8; 32]>::convert_location(&Location::new(
-			2,
-			[GlobalConsensus(EthereumNetwork::get())],
-		))
-		.unwrap()
-		.into();
+	let ethereum_sovereign: AccountId = snowbridge_sovereign();
 	PenpalB::execute_with(|| {
 		assert_ok!(<PenpalB as PenpalBPallet>::ForeignAssets::force_create(
 			<PenpalB as Chain>::RuntimeOrigin::root(),

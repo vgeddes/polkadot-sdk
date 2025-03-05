@@ -26,7 +26,6 @@ use snowbridge_outbound_queue_primitives::v2::{ContractCall, DeliveryReceipt};
 use snowbridge_pallet_outbound_queue_v2::Error;
 use snowbridge_pallet_system_v2::LostTips;
 use xcm::v5::AssetTransferFilter;
-use xcm_executor::traits::ConvertLocation;
 
 #[derive(Encode, Decode, Debug, PartialEq, Clone, TypeInfo)]
 pub enum EthereumSystemFrontendCall {
@@ -143,7 +142,7 @@ pub fn register_relay_token_from_asset_hub_with_sudo() {
 	});
 }
 
-// #[test]
+#[allow(dead_code)]
 pub fn register_relay_token_from_asset_hub_user_origin() {
 	fund_on_bh();
 	register_assets_on_ah();
@@ -299,10 +298,7 @@ pub fn tip_to_invalid_nonce_is_added_to_lost_tips() {
 
 #[test]
 fn transfer_relay_token_from_ah() {
-	let ethereum_sovereign: AccountId =
-		EthereumLocationsConverterFor::<[u8; 32]>::convert_location(&ethereum())
-			.unwrap()
-			.into();
+	let ethereum_sovereign: AccountId = snowbridge_sovereign();
 
 	fund_on_bh();
 

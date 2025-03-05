@@ -20,12 +20,9 @@ use crate::{
 	bridge_common_config::BridgeReward,
 	xcm_config,
 	xcm_config::{RelayNetwork, TreasuryAccount, UniversalLocation, XcmConfig},
-	Balances, BridgeRelayers, EthereumInboundQueue, EthereumInboundQueueV2, EthereumOutboundQueue,
-	EthereumOutboundQueueV2, EthereumSystem, EthereumSystemV2, MessageQueue, Runtime, RuntimeEvent,
-	TransactionByteFee,
+	Balances, BridgeRelayers, EthereumInboundQueue, EthereumInboundQueueV2, EthereumOutboundQueue, EthereumOutboundQueueV2,
+	EthereumSystem, EthereumSystemV2, MessageQueue, Runtime, RuntimeEvent, TransactionByteFee,
 };
-#[cfg(feature = "runtime-benchmarks")]
-use benchmark_helpers::DoNothingRouter;
 use frame_support::{parameter_types, traits::Contains, weights::ConstantMultiplier};
 use frame_system::EnsureRootWithSuccess;
 use pallet_xcm::EnsureXcm;
@@ -104,9 +101,9 @@ impl snowbridge_pallet_inbound_queue::Config for Runtime {
 	type Verifier = snowbridge_pallet_ethereum_client::Pallet<Runtime>;
 	type Token = Balances;
 	#[cfg(not(feature = "runtime-benchmarks"))]
-	type XcmSender = XcmRouter;
+	type XcmSender = crate::XcmRouter;
 	#[cfg(feature = "runtime-benchmarks")]
-	type XcmSender = DoNothingRouter;
+	type XcmSender = benchmark_helpers::DoNothingRouter;
 	type ChannelLookup = EthereumSystem;
 	type GatewayAddress = EthereumGatewayAddress;
 	#[cfg(feature = "runtime-benchmarks")]
@@ -133,9 +130,9 @@ impl snowbridge_pallet_inbound_queue_v2::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type Verifier = snowbridge_pallet_ethereum_client::Pallet<Runtime>;
 	#[cfg(not(feature = "runtime-benchmarks"))]
-	type XcmSender = XcmRouter;
+	type XcmSender = crate::XcmRouter;
 	#[cfg(feature = "runtime-benchmarks")]
-	type XcmSender = DoNothingRouter;
+	type XcmSender = benchmark_helpers::DoNothingRouter;
 	type GatewayAddress = EthereumGatewayAddress;
 	#[cfg(feature = "runtime-benchmarks")]
 	type Helper = Runtime;
@@ -287,15 +284,9 @@ pub struct AllowFromEthereumFrontend;
 impl Contains<Location> for AllowFromEthereumFrontend {
 	fn contains(location: &Location) -> bool {
 		match location.unpack() {
-			(1, [Parachain(para_id), PalletInstance(index)]) => {
-				if *para_id == westend_runtime_constants::system_parachain::ASSET_HUB_ID &&
-					*index == FRONTEND_PALLET_INDEX
-				{
-					true
-				} else {
-					false
-				}
-			},
+			(1, [Parachain(para_id), PalletInstance(index)]) =>
+				return *para_id == westend_runtime_constants::system_parachain::ASSET_HUB_ID &&
+					*index == FRONTEND_PALLET_INDEX,
 			_ => false,
 		}
 	}
