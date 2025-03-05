@@ -226,6 +226,7 @@ mod tests {
 			if token_id != token_id_v2 {
 				println!("tokenId in V2 is not compatible with V1: {:?}", token)
 			}
+			assert_eq!(token_id, token_id_v2);
 		}
 
 		let non_token_locations = [
