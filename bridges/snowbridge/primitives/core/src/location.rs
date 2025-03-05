@@ -23,7 +23,7 @@ pub type AgentId = H256;
 
 /// Creates an AgentId from a Location. An AgentId is a unique mapping to a Agent contract on
 /// Ethereum which acts as the sovereign account for the Location.
-/// Resolves Polkadot locations (as seen by Ethereum) to unique `AgentId` identifiers.
+#[deprecated(note = "Use LocationHashOf instead.")]
 pub type AgentIdOf =
 	HashedDescription<AgentId, (DescribeHere, DescribeFamily<DescribeAllTerminal>)>;
 
@@ -31,14 +31,22 @@ pub type TokenId = H256;
 
 /// Convert a token location (relative to Ethereum) to a stable ID that can be used on the Ethereum
 /// side
+#[deprecated(note = "Use LocationHashOf instead.")]
 pub type TokenIdOf = HashedDescription<
 	TokenId,
-	DescribeForEthereum<(DescribeTerminus, DescribeFamily<DescribeTokenTerminal>)>,
+	DescribeForEthereum<(DescribeTerminus, DescribeFamily<DescribeSnowbridgeTerminal>)>,
 >;
 
+/// Resolves Polkadot locations (as seen by Ethereum) to unique `H256` identifiers.
+/// V1 converter is left here for backwards compatibility
 pub type LocationHashOf = HashedDescription<
 	H256,
-	(DescribeForEthereum<(DescribeTerminus, DescribeFamily<DescribeTokenTerminal>)>,),
+	(
+		DescribeHere,
+		DescribeFamily<DescribeAllTerminal>,
+		DescribeForEthereum<(DescribeTerminus, DescribeFamily<DescribeSnowbridgeTerminal>)>,
+		DescribeForEthereum<(DescribeTerminus, DescribeFamily<DescribeAllTerminal>)>,
+	),
 >;
 
 /// This looks like DescribeTerminus that was added to xcm-builder. However this does an extra
@@ -74,8 +82,8 @@ impl<Suffix: DescribeLocation> DescribeLocation for DescribeForEthereum<Suffix> 
 }
 
 #[deprecated(note = "Use DescribeAllTerminal from xcm-builder instead.")]
-pub struct DescribeTokenTerminal;
-impl DescribeLocation for DescribeTokenTerminal {
+pub struct DescribeSnowbridgeTerminal;
+impl DescribeLocation for DescribeSnowbridgeTerminal {
 	fn describe_location(l: &Location) -> Option<Vec<u8>> {
 		match l.unpack().1 {
 			[] => Some(Vec::<u8>::new().encode()),

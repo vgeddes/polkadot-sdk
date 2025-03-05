@@ -1133,10 +1133,13 @@ fn test_describe_asset_hub() {
 }
 
 #[test]
-fn test_describe_here_will_fail() {
+fn test_describe_here() {
 	let location: Location = Location::new(0, []);
 	let agent_id = AgentIdOf::convert_location(&location);
-	assert_eq!(agent_id, None);
+	assert_eq!(
+		agent_id,
+		Some(hex!("03170a2e7597b7b7e3d84c05391d139a62b157e78786d8c082f29dcf4c111314").into())
+	);
 }
 
 #[test]
