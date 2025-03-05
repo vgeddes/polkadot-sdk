@@ -53,9 +53,6 @@ use frame_support::traits::OriginTrait;
 pub use pallet::*;
 
 pub type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
-
-#[cfg(feature = "runtime-benchmarks")]
-use frame_support::traits::OriginTrait;
 #[cfg(feature = "runtime-benchmarks")]
 pub trait BenchmarkHelper<O>
 where
