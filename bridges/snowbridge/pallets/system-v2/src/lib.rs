@@ -34,7 +34,7 @@ pub use weights::*;
 
 use frame_support::{pallet_prelude::*, traits::EnsureOrigin};
 use frame_system::pallet_prelude::*;
-use snowbridge_core::{AgentIdOf as LocationHashOf, AssetMetadata, TokenId, TokenIdOf};
+use snowbridge_core::{AssetMetadata, LocationHashOf, TokenId};
 use snowbridge_outbound_queue_primitives::{
 	v2::{Command, Initializer, Message, SendMessage},
 	OperatingMode, SendError,
@@ -196,7 +196,7 @@ pub mod pallet {
 
 			let location = Self::reanchor(&asset_location)?;
 
-			let token_id = TokenIdOf::convert_location(&location)
+			let token_id = LocationHashOf::convert_location(&location)
 				.ok_or(Error::<T>::LocationConversionFailed)?;
 
 			if !ForeignToNativeId::<T>::contains_key(token_id) {

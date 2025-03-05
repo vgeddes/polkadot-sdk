@@ -24,14 +24,8 @@ pub type AgentId = H256;
 /// Creates an AgentId from a Location. An AgentId is a unique mapping to a Agent contract on
 /// Ethereum which acts as the sovereign account for the Location.
 /// Resolves Polkadot locations (as seen by Ethereum) to unique `AgentId` identifiers.
-pub type AgentIdOf = HashedDescription<
-	AgentId,
-	(
-		DescribeHere,
-		DescribeFamily<DescribeAllTerminal>,
-		DescribeGlobalPrefix<(DescribeTerminus, DescribeFamily<DescribeTokenTerminal>)>,
-	),
->;
+pub type AgentIdOf =
+	HashedDescription<AgentId, (DescribeHere, DescribeFamily<DescribeAllTerminal>)>;
 
 pub type TokenId = H256;
 
@@ -39,7 +33,12 @@ pub type TokenId = H256;
 /// side
 pub type TokenIdOf = HashedDescription<
 	TokenId,
-	DescribeGlobalPrefix<(DescribeTerminus, DescribeFamily<DescribeTokenTerminal>)>,
+	DescribeForEthereum<(DescribeTerminus, DescribeFamily<DescribeTokenTerminal>)>,
+>;
+
+pub type LocationHashOf = HashedDescription<
+	H256,
+	(DescribeForEthereum<(DescribeTerminus, DescribeFamily<DescribeAllTerminal>)>,),
 >;
 
 /// This looks like DescribeTerminus that was added to xcm-builder. However this does an extra
@@ -57,10 +56,12 @@ impl DescribeLocation for DescribeHere {
 		}
 	}
 }
-pub struct DescribeGlobalPrefix<DescribeInterior>(sp_std::marker::PhantomData<DescribeInterior>);
-impl<Suffix: DescribeLocation> DescribeLocation for DescribeGlobalPrefix<Suffix> {
+pub struct DescribeForEthereum<DescribeInterior>(sp_std::marker::PhantomData<DescribeInterior>);
+impl<Suffix: DescribeLocation> DescribeLocation for DescribeForEthereum<Suffix> {
 	fn describe_location(l: &Location) -> Option<Vec<u8>> {
 		match (l.parent_count(), l.first_interior()) {
+			// Parent is 1 just because location is already reanchored on AH relative to ethereum
+			// (2, GlobalConsensus(Ethereum)) context
 			(1, Some(GlobalConsensus(network))) => {
 				let mut tail = l.clone().split_first_interior().0;
 				tail.dec_parent();
@@ -72,6 +73,7 @@ impl<Suffix: DescribeLocation> DescribeLocation for DescribeGlobalPrefix<Suffix>
 	}
 }
 
+#[deprecated(note = "Use DescribeAllTerminal from xcm-builder instead.")]
 pub struct DescribeTokenTerminal;
 impl DescribeLocation for DescribeTokenTerminal {
 	fn describe_location(l: &Location) -> Option<Vec<u8>> {
@@ -102,7 +104,7 @@ impl DescribeLocation for DescribeTokenTerminal {
 
 #[cfg(test)]
 mod tests {
-	use crate::TokenIdOf;
+	use crate::{LocationHashOf, TokenIdOf};
 	use xcm::{
 		latest::WESTEND_GENESIS_HASH,
 		prelude::{
@@ -210,10 +212,12 @@ mod tests {
 		];
 
 		for token in token_locations {
-			assert!(
-				TokenIdOf::convert_location(&token).is_some(),
-				"Valid token = {token:?} yields no TokenId."
-			);
+			let token_id = TokenIdOf::convert_location(&token).unwrap();
+			let token_id_v2 = LocationHashOf::convert_location(&token).unwrap();
+			// which means V2 is not compatible with V1
+			if token_id != token_id_v2 {
+				println!("tokenId in V2 is not compatible with V1: {:?}", token)
+			}
 		}
 
 		let non_token_locations = [

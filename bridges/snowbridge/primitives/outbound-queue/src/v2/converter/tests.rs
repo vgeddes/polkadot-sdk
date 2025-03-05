@@ -5,9 +5,12 @@ use crate::{
 };
 use frame_support::{parameter_types, BoundedVec};
 use hex_literal::hex;
-use snowbridge_core::{AgentIdOf, TokenIdOf};
 use sp_std::default::Default;
 use xcm::{latest::WESTEND_GENESIS_HASH, prelude::SendError as XcmSendError};
+
+type AgentIdOf = snowbridge_core::LocationHashOf;
+type LegacyAgentIdOf = snowbridge_core::AgentIdOf;
+type TokenIdOf = snowbridge_core::LocationHashOf;
 
 parameter_types! {
 	const MaxMessageSize: u32 = u32::MAX;
@@ -1115,28 +1118,25 @@ fn xcm_converter_convert_with_non_ethereum_chain_beneficiary_yields_beneficiary_
 
 #[test]
 fn test_describe_asset_hub() {
-	let legacy_location: Location = Location::new(0, [Parachain(1000)]);
-	let legacy_agent_id = AgentIdOf::convert_location(&legacy_location).unwrap();
+	let legacy_location: Location = Location::new(1, [Parachain(1000)]);
+	let legacy_agent_id = LegacyAgentIdOf::convert_location(&legacy_location).unwrap();
 	assert_eq!(
 		legacy_agent_id,
-		hex!("72456f48efed08af20e5b317abf8648ac66e86bb90a411d9b0b713f7364b75b4").into()
+		hex!("81c5ab2571199e3188135178f3c2c8e2d268be1313d029b30f534fa579b69b79").into()
 	);
-	let location: Location = Location::new(1, [Parachain(1000)]);
+	let location: Location = Location::new(1, [GlobalConsensus(Polkadot), Parachain(1000)]);
 	let agent_id = AgentIdOf::convert_location(&location).unwrap();
 	assert_eq!(
 		agent_id,
-		hex!("81c5ab2571199e3188135178f3c2c8e2d268be1313d029b30f534fa579b69b79").into()
+		hex!("a044af074c000576cf668bc40e95f576e94359b9ad947591bbba5221dbe512d3").into()
 	)
 }
 
 #[test]
-fn test_describe_here() {
+fn test_describe_here_will_fail() {
 	let location: Location = Location::new(0, []);
-	let agent_id = AgentIdOf::convert_location(&location).unwrap();
-	assert_eq!(
-		agent_id,
-		hex!("03170a2e7597b7b7e3d84c05391d139a62b157e78786d8c082f29dcf4c111314").into()
-	)
+	let agent_id = AgentIdOf::convert_location(&location);
+	assert_eq!(agent_id, None);
 }
 
 #[test]
@@ -1171,7 +1171,7 @@ fn xcm_converter_transfer_native_token_success() {
 		Command::MintForeignToken { recipient: beneficiary_address.into(), amount, token_id };
 	let expected_message = Message {
 		id: [0; 32].into(),
-		origin: hex!("aa16eddac8725928eaeda4aae518bf10d02bee80382517d21464a5cdf8d1d8e1").into(),
+		origin: hex!("a044af074c000576cf668bc40e95f576e94359b9ad947591bbba5221dbe512d3").into(),
 		fee: 1000,
 		commands: BoundedVec::try_from(vec![expected_payload]).unwrap(),
 	};

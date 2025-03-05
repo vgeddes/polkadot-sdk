@@ -214,34 +214,6 @@ impl<Suffix: DescribeLocation> DescribeLocation for DescribeFamily<Suffix> {
 	}
 }
 
-/// Resolves Polkadot locations (as seen by Ethereum) to an unique 32 bytes identifiers.
-pub struct DescribeForEthereum<EthereumLocation, UniversalLocation, Suffix>(
-	PhantomData<(EthereumLocation, UniversalLocation, Suffix)>,
-);
-impl<
-		EthereumLocation: Get<Location>,
-		UniversalLocation: Get<InteriorLocation>,
-		Suffix: DescribeLocation,
-	> DescribeLocation for DescribeForEthereum<EthereumLocation, UniversalLocation, Suffix>
-{
-	fn describe_location(l: &Location) -> Option<Vec<u8>> {
-		let location = l.clone().reanchored(&EthereumLocation::get(), &UniversalLocation::get());
-		let location = match location {
-			Ok(l) => l,
-			_ => return None,
-		};
-		match (location.parent_count(), location.first_interior()) {
-			(n, Some(GlobalConsensus(network))) => {
-				let mut tail = location.clone().split_first_interior().0;
-				tail.dec_parent();
-				let interior = Suffix::describe_location(&tail)?;
-				Some((b"Parent", n, b"GlobalConsensus", network, b"Interior", interior).encode())
-			},
-			_ => None,
-		}
-	}
-}
-
 pub struct HashedDescription<AccountId, Describe>(PhantomData<(AccountId, Describe)>);
 impl<AccountId: From<[u8; 32]> + Clone, Describe: DescribeLocation> ConvertLocation<AccountId>
 	for HashedDescription<AccountId, Describe>

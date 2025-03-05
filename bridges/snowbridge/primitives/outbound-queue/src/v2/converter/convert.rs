@@ -5,7 +5,7 @@
 use codec::DecodeAll;
 use core::slice::Iter;
 use frame_support::{ensure, BoundedVec};
-use snowbridge_core::{AgentIdOf, TokenId, TokenIdOf};
+use snowbridge_core::{LocationHashOf, TokenId};
 
 use crate::v2::{
 	message::{Command, Message},
@@ -178,7 +178,7 @@ where
 			ensure!(amount > 0, ZeroAssetTransfer);
 
 			// Ensure PNA already registered
-			let token_id = TokenIdOf::convert_location(&asset_id).ok_or(InvalidAsset)?;
+			let token_id = LocationHashOf::convert_location(&asset_id).ok_or(InvalidAsset)?;
 			let expected_asset_id = ConvertAssetId::convert(&token_id).ok_or(InvalidAsset)?;
 			ensure!(asset_id == expected_asset_id, InvalidAsset);
 
@@ -246,7 +246,7 @@ where
 		// Check AliasOrigin.
 		let origin_location = match_expression!(self.next()?, AliasOrigin(origin), origin)
 			.ok_or(AliasOriginExpected)?;
-		let origin = AgentIdOf::convert_location(origin_location).ok_or(InvalidOrigin)?;
+		let origin = LocationHashOf::convert_location(origin_location).ok_or(InvalidOrigin)?;
 
 		let (deposit_assets, beneficiary) = match_expression!(
 			self.next()?,
