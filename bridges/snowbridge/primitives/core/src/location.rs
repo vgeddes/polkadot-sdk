@@ -38,7 +38,13 @@ pub type TokenIdOf = HashedDescription<
 >;
 
 /// Resolves Polkadot locations (as seen by Ethereum) to unique `H256` identifiers.
-/// V1 converter is left here for backwards compatibility
+/// All V1 converters are inherited here for backwards compatibility
+/// With AliasOrigin enforced in V2 the user origin from source chain will be reserved and sent to
+/// Ethereum.
+/// For asset transfers, the legacy AH agent ID is hardcoded in the V2 contract side,
+/// which ignores the user origin, so there won't be any compatibility issue.
+/// For transact calls, the user origin will be respected in the V2 contract side, but won't
+/// conflict with the legacy AH.
 pub type LocationHashOf = HashedDescription<
 	H256,
 	(
