@@ -31,6 +31,8 @@ pub struct PreparedMessage {
 	pub remote_xcm: Xcm<()>,
 	/// Fee in Ether to cover the xcm execution on AH.
 	pub execution_fee: Asset,
+	/// Topic for tracking and identification that is derived from message nonce
+	pub topic: [u8; 32],
 }
 
 /// An asset transfer instruction
@@ -146,12 +148,18 @@ where
 			}
 		}
 
+		let (result_xcm, topic_id) = Self::filter_topic(remote_xcm);
+
+		// Use the topic_id if found, otherwise generate a new one.
+		let topic: [u8; 32] = topic_id.unwrap_or_else(|| unique(&result_xcm));
+
 		let prepared_message = PreparedMessage {
 			origin: message.origin.clone(),
 			claimer,
 			assets,
-			remote_xcm,
+			remote_xcm: result_xcm,
 			execution_fee: execution_fee_asset,
+			topic,
 		};
 
 		Ok(prepared_message)
@@ -252,6 +260,30 @@ where
 		// Decoding failed; allow an empty XCM so the message won't fail entirely.
 		Xcm::new()
 	}
+
+	fn filter_topic(xcm: Xcm<()>) -> (Xcm<()>, Option<[u8; 32]>) {
+		let mut result_xcm = xcm.0;
+
+		// First, try to see if the last instruction is a SetTopic.
+		if !result_xcm.is_empty() {
+			let last_index = result_xcm.len() - 1;
+			if let SetTopic(_) = &result_xcm[last_index] {
+				// We know the last element is a SetTopic. Remove it.
+				if let Some(SetTopic(topic)) = result_xcm.pop() {
+					return (result_xcm.into(), Some(topic));
+				}
+			}
+		}
+
+		// If we didn't find a SetTopic at the end, search for one anywhere in the instructions.
+		if let Some(pos) = result_xcm.iter().rposition(|instr| matches!(instr, SetTopic(_))) {
+			if let SetTopic(topic) = result_xcm.remove(pos) {
+				return (result_xcm.into(), Some(topic));
+			}
+		}
+
+		(result_xcm.into(), None)
+	}
 }
 
 impl<
@@ -320,7 +352,7 @@ where
 			match asset {
 				AssetTransfer::ReserveDeposit(asset) => reserve_deposit_assets.push(asset),
 				AssetTransfer::ReserveWithdraw(asset) => reserve_withdraw_assets.push(asset),
-			};
+			}
 		}
 
 		instructions.push(ReserveAssetDeposited(reserve_deposit_assets.into()));
@@ -335,18 +367,15 @@ where
 			));
 		}
 
-		// Add the XCM sent in the message to the end of the xcm instruction
-		instructions.extend(message.remote_xcm.clone().0);
+		// Append the remote instructions (without the topic, if it was present).
+		instructions.extend(message.remote_xcm.0);
+		// Append instructions that come after remote_xcm.
 		instructions.push(RefundSurplus);
-		// Refund excess fees to the claimer
 		instructions.push(DepositAsset {
 			assets: Wild(AllOf { id: message.execution_fee.clone().id, fun: WildFungible }),
-			beneficiary: claimer,
+			beneficiary: claimer.clone(),
 		});
-		// Only add SetTopic if the user didn't already add one
-		if !matches!(&message.remote_xcm.last(), Some(SetTopic(_))) {
-			instructions.push(SetTopic(unique(&message)));
-		}
+		instructions.push(SetTopic(message.topic));
 
 		Ok(instructions.into())
 	}
@@ -750,7 +779,7 @@ mod tests {
 			assert_eq!(
 				last,
 				Some(SetTopic(
-					hex!("0e34f0ea46de734a4c9979659a554b385281f1f4ea6523b79b4ef2b40328d656").into()
+					hex!("72397e1119246b9558d23ce625bc9c4abb49e71903ed7ae6677d64c73160c952").into()
 				))
 			);
 		});
@@ -865,7 +894,7 @@ mod tests {
 			let mut instructions = xcm.into_iter();
 
 			let generated_topic: [u8; 32] =
-				hex!("6bc1a493ce2bc50e13870d4232133eeff5e822fc8bc4290d20055683783bf107");
+				hex!("a93b9994acebd1fb0c3c5f65fe1cbfffdf194cc9a139642bed26f539306ec52b");
 			let mut set_topic_found = false;
 			while let Some(instruction) = instructions.next() {
 				if let SetTopic(ref topic) = instruction {
@@ -879,7 +908,7 @@ mod tests {
 	}
 
 	#[test]
-	fn message_with_generates_a_unique_topic_if_user_topic_not_last_instruction() {
+	fn message_with_user_topic_not_last_instruction_gets_appended() {
 		sp_io::TestExternalities::default().execute_with(|| {
 			let origin: H160 = hex!("29e3b139f4393adda86303fcdaa35f60bb7092bf").into();
 
@@ -912,19 +941,11 @@ mod tests {
 			let xcm = result.unwrap();
 			let mut instructions = xcm.into_iter();
 
-			let generated_topic: [u8; 32] =
-				hex!("c5056e02100c7a363f1c5de99efc3693430a957376d095f61614e3e01650179e");
-
 			let mut set_topic_found = false;
-			let mut counter = 0;
 			while let Some(instruction) = instructions.next() {
 				if let SetTopic(ref topic) = instruction {
-					counter = counter + 1;
-					// The second topic which the converter added is of interest here
-					if counter == 2 {
-						assert_eq!(*topic, generated_topic);
-						set_topic_found = true;
-					}
+					assert_eq!(*topic, user_topic);
+					set_topic_found = true;
 				}
 			}
 
