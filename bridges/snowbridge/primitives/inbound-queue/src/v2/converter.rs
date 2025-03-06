@@ -176,7 +176,7 @@ where
 	}
 
 	/// Construct the remote XCM needed to create a new asset in the `ForeignAssets` pallet
-	/// on AssetHub (Polkadot or Kusama).
+	/// on AssetHub. Polkadot is the only supported network at the moment.
 	fn make_create_asset_xcm(
 		token: &H160,
 		network: super::message::Network,
@@ -211,6 +211,7 @@ where
 		}
 	}
 
+	/// Construct the asset creation XCM for the Polkdot network.
 	fn make_create_asset_xcm_for_polkadot(
 		create_call_index: [u8; 2],
 		asset_id: Location,
@@ -261,6 +262,8 @@ where
 		Xcm::new()
 	}
 
+	/// Removes the SetTopic instruction from the provided XCM, and returns the TopicID in the
+	/// SetTopic.
 	fn filter_topic(xcm: Xcm<()>) -> (Xcm<()>, Option<[u8; 32]>) {
 		let mut result_xcm = xcm.0;
 
