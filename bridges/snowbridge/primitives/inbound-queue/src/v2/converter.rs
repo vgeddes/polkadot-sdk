@@ -9,7 +9,6 @@ use core::marker::PhantomData;
 use frame_system::unique;
 use snowbridge_core::TokenId;
 use sp_core::{Get, RuntimeDebug, H160};
-use sp_io::hashing::blake2_256;
 use sp_runtime::{traits::MaybeEquivalence, MultiAddress};
 use sp_std::prelude::*;
 use xcm::{
@@ -18,10 +17,6 @@ use xcm::{
 };
 
 const MINIMUM_DEPOSIT: u128 = 1;
-
-/// Topic prefix used for generating unique identifiers for messages
-const INBOUND_QUEUE_TOPIC_PREFIX: &str = "SnowbridgeInboundQueueV2";
-
 /// Representation of an intermediate parsed message, before final
 /// conversion to XCM.
 #[derive(Clone, RuntimeDebug, Encode)]
@@ -755,7 +750,7 @@ mod tests {
 			assert_eq!(
 				last,
 				Some(SetTopic(
-					hex!("a05572b60999c722477f58d1c3b33d8717f71bef66564453dca330b175186e17").into()
+					hex!("0e34f0ea46de734a4c9979659a554b385281f1f4ea6523b79b4ef2b40328d656").into()
 				))
 			);
 		});
@@ -870,7 +865,7 @@ mod tests {
 			let mut instructions = xcm.into_iter();
 
 			let generated_topic: [u8; 32] =
-				hex!("66559e226e4c9acc809403329a08cfd77ff84ca330ca3fb7393b05b110a10553");
+				hex!("6bc1a493ce2bc50e13870d4232133eeff5e822fc8bc4290d20055683783bf107");
 			let mut set_topic_found = false;
 			while let Some(instruction) = instructions.next() {
 				if let SetTopic(ref topic) = instruction {
@@ -918,7 +913,7 @@ mod tests {
 			let mut instructions = xcm.into_iter();
 
 			let generated_topic: [u8; 32] =
-				hex!("c5beff8193e7eb317177749df3d70732ccd307f1e3e0a8758552e2fc7350a7b9");
+				hex!("c5056e02100c7a363f1c5de99efc3693430a957376d095f61614e3e01650179e");
 
 			let mut set_topic_found = false;
 			let mut counter = 0;
