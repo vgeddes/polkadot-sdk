@@ -167,7 +167,7 @@ where
 
 	/// Get the bridge owner account ID from the current Ethereum network chain ID.
 	/// Returns an error if the network is not Ethereum.
-	fn get_bridge_owner() -> Result<[u8; 32], ConvertMessageError> {
+	fn bridge_owner() -> Result<[u8; 32], ConvertMessageError> {
 		let chain_id = match EthereumNetwork::get() {
 			NetworkId::Ethereum { chain_id } => chain_id,
 			_ => return Err(ConvertMessageError::InvalidNetwork),
@@ -182,7 +182,7 @@ where
 		network: super::message::Network,
 		eth_value: u128,
 	) -> Result<Xcm<()>, ConvertMessageError> {
-		let bridge_owner = Self::get_bridge_owner()?;
+		let bridge_owner = Self::bridge_owner()?;
 
 		let dot_asset = Location::new(1, Here);
 		let dot_fee: xcm::prelude::Asset = (dot_asset, CreateAssetDeposit::get()).into();
@@ -329,7 +329,7 @@ where
 			ReserveAssetDeposited(message.execution_fee.clone().into()),
 		];
 
-		let bridge_owner = Self::get_bridge_owner()?;
+		let bridge_owner = Self::bridge_owner()?;
 		// Make the Snowbridge sovereign on AH the default claimer.
 		let default_claimer = Location::new(0, [AccountId32 { network: None, id: bridge_owner }]);
 
