@@ -36,8 +36,6 @@ pub struct PreparedMessage {
 	pub remote_xcm: Xcm<()>,
 	/// Fee in Ether to cover the xcm execution on AH.
 	pub execution_fee: Asset,
-	/// Topic for tracking and identification that is derived from message nonce
-	pub topic: [u8; 32],
 }
 
 /// An asset transfer instruction
@@ -153,15 +151,12 @@ where
 			}
 		}
 
-		let topic = blake2_256(&(INBOUND_QUEUE_TOPIC_PREFIX, message.nonce).encode());
-
 		let prepared_message = PreparedMessage {
 			origin: message.origin.clone(),
 			claimer,
 			assets,
 			remote_xcm,
 			execution_fee: execution_fee_asset,
-			topic,
 		};
 
 		Ok(prepared_message)
@@ -355,7 +350,6 @@ where
 		});
 		// Only add SetTopic if the user didn't already add one
 		if !matches!(&message.remote_xcm.last(), Some(SetTopic(_))) {
-			println!("Adding topic");
 			instructions.push(SetTopic(unique(&message)));
 		}
 
