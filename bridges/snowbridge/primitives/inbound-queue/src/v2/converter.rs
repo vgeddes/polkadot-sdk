@@ -215,7 +215,12 @@ where
 			],
 		);
 
-		let claimer_account = Self::extract_account(claimer, bridge_owner);
+		// If the claimer is an AccountId32 on AH, use it to refund excess fees.
+		// Otherwise, use the bridge owner.
+		let claimer_account = match claimer.unpack() {
+			(0, [AccountId32 { id, .. }]) => *id,
+			_ => bridge_owner,
+		};
 
 		match network {
 			super::message::Network::Polkadot => Ok(Self::make_create_asset_xcm_for_polkadot(
@@ -285,13 +290,6 @@ where
 		}
 		// Decoding failed; allow an empty XCM so the message won't fail entirely.
 		Xcm::new()
-	}
-
-	fn extract_account(claimer: Location, bridge_owner: [u8; 32]) -> [u8; 32] {
-		match claimer.unpack() {
-			(0, [AccountId32 { id, .. }]) => *id,
-			_ => bridge_owner,
-		}
 	}
 }
 
