@@ -6,9 +6,9 @@ use super::{message::*, traits::*};
 use crate::{v2::LOG_TARGET, CallIndex, EthereumLocationsConverterFor};
 use codec::{Decode, DecodeLimit, Encode};
 use core::marker::PhantomData;
-use frame_system::unique;
 use snowbridge_core::TokenId;
 use sp_core::{Get, RuntimeDebug, H160};
+use sp_io::hashing::blake2_256;
 use sp_runtime::{traits::MaybeEquivalence, MultiAddress};
 use sp_std::prelude::*;
 use xcm::{
@@ -17,6 +17,10 @@ use xcm::{
 };
 
 const MINIMUM_DEPOSIT: u128 = 1;
+
+/// Topic prefix used for generating unique identifiers for messages
+const INBOUND_QUEUE_TOPIC_PREFIX: &str = "SnowbridgeInboundQueueV2";
+
 /// Representation of an intermediate parsed message, before final
 /// conversion to XCM.
 #[derive(Clone, RuntimeDebug, Encode)]
@@ -24,7 +28,7 @@ pub struct PreparedMessage {
 	/// Ethereum account that initiated this messaging operation
 	pub origin: H160,
 	/// The claimer in the case that funds get trapped.
-	pub claimer: Option<Location>,
+	pub claimer: Location,
 	/// The assets bridged from Ethereum
 	pub assets: Vec<AssetTransfer>,
 	/// The XCM to execute on the destination
@@ -98,21 +102,34 @@ where
 	fn prepare(message: Message) -> Result<PreparedMessage, ConvertMessageError> {
 		let ether_location = Location::new(2, [GlobalConsensus(EthereumNetwork::get())]);
 
+		let bridge_owner = Self::bridge_owner()?;
+
+		let maybe_claimer: Option<Location> = match message.claimer {
+			Some(claimer_bytes) => Location::decode(&mut claimer_bytes.as_ref()).ok(),
+			None => None,
+		};
+
+		// Make the Snowbridge sovereign on AH the fallback claimer.
+		let claimer = match maybe_claimer {
+			Some(claimer) => claimer,
+			None => Location::new(0, [AccountId32 { network: None, id: bridge_owner }]),
+		};
+
 		let mut remote_xcm: Xcm<()> = match &message.xcm {
 			XcmPayload::Raw(raw) => Self::decode_raw_xcm(raw),
-			XcmPayload::CreateAsset { token, network } =>
-				Self::make_create_asset_xcm(token, *network, message.value)?,
+			XcmPayload::CreateAsset { token, network } => Self::make_create_asset_xcm(
+				token,
+				*network,
+				message.value,
+				bridge_owner,
+				claimer.clone(),
+			)?,
 		};
 
 		// Asset to cover XCM execution fee
 		let execution_fee_asset: Asset = (ether_location.clone(), message.execution_fee).into();
 
 		let mut assets = vec![];
-
-		let claimer: Option<Location> = match message.claimer {
-			Some(claimer_bytes) => Location::decode(&mut claimer_bytes.as_ref()).ok(),
-			None => None,
-		};
 
 		if message.value > 0 {
 			// Asset for remaining ether
@@ -148,9 +165,9 @@ where
 
 		// Add SetTopic instruction if not already present as the last instruction
 		if !matches!(remote_xcm.0.last(), Some(SetTopic(_))) {
-			remote_xcm.0.push(SetTopic(unique(&remote_xcm)));
+			let topic = blake2_256(&(INBOUND_QUEUE_TOPIC_PREFIX, message.nonce).encode());
+			remote_xcm.0.push(SetTopic(topic));
 		}
-
 
 		let prepared_message = PreparedMessage {
 			origin: message.origin.clone(),
@@ -179,9 +196,9 @@ where
 		token: &H160,
 		network: super::message::Network,
 		eth_value: u128,
+		bridge_owner: [u8; 32],
+		claimer: Location,
 	) -> Result<Xcm<()>, ConvertMessageError> {
-		let bridge_owner = Self::bridge_owner()?;
-
 		let dot_asset = Location::new(1, Here);
 		let dot_fee: xcm::prelude::Asset = (dot_asset, CreateAssetDeposit::get()).into();
 
@@ -198,6 +215,8 @@ where
 			],
 		);
 
+		let claimer_account = Self::extract_account(claimer, bridge_owner);
+
 		match network {
 			super::message::Network::Polkadot => Ok(Self::make_create_asset_xcm_for_polkadot(
 				create_call_index,
@@ -205,6 +224,7 @@ where
 				bridge_owner,
 				dot_fee,
 				eth_asset,
+				claimer_account,
 			)),
 		}
 	}
@@ -216,6 +236,7 @@ where
 		bridge_owner: [u8; 32],
 		dot_fee_asset: xcm::prelude::Asset,
 		eth_asset: xcm::prelude::Asset,
+		claimer_account: [u8; 32],
 	) -> Xcm<()> {
 		vec![
 			RefundSurplus,
@@ -227,7 +248,10 @@ where
 			},
 			// Deposit the dot deposit into the bridge sovereign account (where the asset
 			// creation fee will be deducted from).
-			DepositAsset { assets: dot_fee_asset.clone().into(), beneficiary: bridge_owner.clone().into() },
+			DepositAsset {
+				assets: dot_fee_asset.clone().into(),
+				beneficiary: bridge_owner.clone().into(),
+			},
 			// Call to create the asset.
 			Transact {
 				origin_kind: OriginKind::Xcm,
@@ -242,7 +266,7 @@ where
 					.into(),
 			},
 			// Deposit leftover funds to Snowbridge sovereign
-			DepositAsset { assets: Wild(AllCounted(2)), beneficiary: bridge_owner.clone().into() },
+			DepositAsset { assets: Wild(AllCounted(2)), beneficiary: claimer_account.into() },
 		]
 		.into()
 	}
@@ -261,6 +285,13 @@ where
 		}
 		// Decoding failed; allow an empty XCM so the message won't fail entirely.
 		Xcm::new()
+	}
+
+	fn extract_account(claimer: Location, bridge_owner: [u8; 32]) -> [u8; 32] {
+		match claimer.unpack() {
+			(0, [AccountId32 { id, .. }]) => *id,
+			_ => bridge_owner,
+		}
 	}
 }
 
@@ -307,16 +338,10 @@ where
 			ReserveAssetDeposited(message.execution_fee.clone().into()),
 		];
 
-		let bridge_owner = Self::bridge_owner()?;
-		// Make the Snowbridge sovereign on AH the default claimer.
-		let default_claimer = Location::new(0, [AccountId32 { network: None, id: bridge_owner }]);
-
-		let claimer = message.claimer.unwrap_or(default_claimer);
-
 		// Set claimer before PayFees, in case the fees are not enough. Then the claimer will be
 		// able to claim the funds still.
 		instructions.push(SetHints {
-			hints: vec![AssetClaimer { location: claimer.clone() }]
+			hints: vec![AssetClaimer { location: message.claimer }]
 				.try_into()
 				.expect("checked statically, qed"),
 		});
@@ -467,7 +492,8 @@ mod tests {
 			let instructions: Vec<_> = xcm.into_iter().collect();
 
 			// Check last instruction is a SetTopic (automatically added)
-			let last_instruction = instructions.last().expect("should have at least one instruction");
+			let last_instruction =
+				instructions.last().expect("should have at least one instruction");
 			assert!(matches!(last_instruction, SetTopic(_)), "Last instruction should be SetTopic");
 
 			let mut asset_claimer_found = false;
@@ -693,7 +719,8 @@ mod tests {
 			let instructions: Vec<_> = xcm.into_iter().collect();
 
 			// Check last instruction is a SetTopic (automatically added)
-			let last_instruction = instructions.last().expect("should have at least one instruction");
+			let last_instruction =
+				instructions.last().expect("should have at least one instruction");
 			assert!(matches!(last_instruction, SetTopic(_)), "Last instruction should be SetTopic");
 
 			let mut actual_claimer: Option<Location> = None;
@@ -790,7 +817,8 @@ mod tests {
 			let instructions: Vec<_> = xcm.into_iter().collect();
 
 			// The last instruction should be the user's SetTopic
-			let last_instruction = instructions.last().expect("should have at least one instruction");
+			let last_instruction =
+				instructions.last().expect("should have at least one instruction");
 			if let SetTopic(ref topic) = last_instruction {
 				assert_eq!(*topic, user_topic);
 			} else {
@@ -826,7 +854,8 @@ mod tests {
 			let instructions: Vec<_> = xcm.into_iter().collect();
 
 			// The last instruction should be a SetTopic
-			let last_instruction = instructions.last().expect("should have at least one instruction");
+			let last_instruction =
+				instructions.last().expect("should have at least one instruction");
 			assert!(matches!(last_instruction, SetTopic(_)));
 		});
 	}
@@ -865,10 +894,12 @@ mod tests {
 			let xcm = result.unwrap();
 			let instructions: Vec<_> = xcm.into_iter().collect();
 
-			// Get the last instruction - should still be a SetTopic, but might not have the original topic
-			// since for non-last-instruction topics, the filter_topic function extracts it during
-			// prepare() and then the original value is later lost when we append a new one
-			let last_instruction = instructions.last().expect("should have at least one instruction");
+			// Get the last instruction - should still be a SetTopic, but might not have the
+			// original topic since for non-last-instruction topics, the filter_topic function
+			// extracts it during prepare() and then the original value is later lost when we
+			// append a new one
+			let last_instruction =
+				instructions.last().expect("should have at least one instruction");
 
 			// Check if the last instruction is a SetTopic (content isn't important)
 			assert!(matches!(last_instruction, SetTopic(_)), "Last instruction should be SetTopic");
