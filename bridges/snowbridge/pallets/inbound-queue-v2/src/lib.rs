@@ -213,7 +213,7 @@ pub mod pallet {
 	/// key for the storage map is the nonce of the message to which the tip should be added.
 	/// The value is the tip amount, in Ether.
 	#[pallet::storage]
-	pub type Tips<T: Config> = StorageMap<_, Blake2_128Concat, u64, u128, ValueQuery>;
+	pub type Tips<T: Config> = StorageMap<_, Blake2_128Concat, u64, u128, OptionQuery>;
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
@@ -269,8 +269,11 @@ pub mod pallet {
 				})?;
 
 			// Get the tip and remove it from storage, if a tip was added.
-			let tip_amount = Tips::<T>::take(message.nonce);
-			let total_reward = message.relayer_fee.saturating_add(tip_amount);
+			let tip = Tips::<T>::take(message.nonce);
+			let total_reward = match tip {
+				Some(amount) => message.relayer_fee.saturating_add(amount),
+				None => message.relayer_fee,
+			};
 
 			T::RewardPayment::register_reward(&relayer, T::DefaultRewardKind::get(), total_reward);
 
@@ -314,8 +317,8 @@ pub mod pallet {
 			// If the nonce is already processed, return an error
 			ensure!(!Nonce::<T>::get(nonce.into()), AddTipError::NonceConsumed);
 			// Otherwise add the tip.
-			Tips::<T>::mutate(nonce, |current_tip| {
-				*current_tip = current_tip.saturating_add(amount);
+			Tips::<T>::mutate(nonce, |tip| {
+				*tip = Some(tip.unwrap_or_default().saturating_add(amount));
 			});
 			return Ok(())
 		}

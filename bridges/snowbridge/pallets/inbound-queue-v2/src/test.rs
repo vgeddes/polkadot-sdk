@@ -301,11 +301,11 @@ fn test_add_tip_cumulative() {
 		let amount1: u128 = 500;
 		let amount2: u128 = 300;
 
-		assert_eq!(Tips::<Test>::get(nonce), 0);
+		assert_eq!(Tips::<Test>::get(nonce), None);
 		assert_ok!(InboundQueue::add_tip(nonce, amount1));
-		assert_eq!(Tips::<Test>::get(nonce), amount1);
+		assert_eq!(Tips::<Test>::get(nonce), Some(amount1));
 		assert_ok!(InboundQueue::add_tip(nonce, amount2));
-		assert_eq!(Tips::<Test>::get(nonce), amount1 + amount2);
+		assert_eq!(Tips::<Test>::get(nonce), Some(amount1 + amount2));
 	});
 }
 
@@ -317,6 +317,6 @@ fn test_add_tip_nonce_consumed() {
 		Nonce::<Test>::set(nonce.into());
 
 		assert_noop!(InboundQueue::add_tip(nonce, amount), AddTipError::NonceConsumed);
-		assert_eq!(Tips::<Test>::get(nonce), 0);
+		assert_eq!(Tips::<Test>::get(nonce), None);
 	});
 }
