@@ -48,9 +48,13 @@ pub type TokenIdOf = HashedDescription<
 pub type LocationHashOf = HashedDescription<
 	H256,
 	(
+		// To ensure compatible with V1 for agent of BH.
 		DescribeHere,
+		// To ensure compatible with V1 for agent of AH.
 		DescribeFamily<DescribeAllTerminal>,
+		// To ensure compatible with V1 for polkadot native assets
 		DescribeForEthereum<(DescribeTerminus, DescribeFamily<DescribeSnowbridgeTerminal>)>,
+		// Use this for all reanchored locations in V2, require an enhanced `DescribeAllTerminal`
 		DescribeForEthereum<(DescribeTerminus, DescribeFamily<DescribeAllTerminal>)>,
 	),
 >;
