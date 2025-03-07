@@ -295,7 +295,7 @@ where
 	GlobalAssetHubLocation: Get<Location>,
 {
 	fn convert(message: Message) -> Result<Xcm<()>, ConvertMessageError> {
-		let mut message = Self::prepare(message)?;
+		let message = Self::prepare(message)?;
 
 		log::trace!(target: LOG_TARGET,"prepared message: {:?}", message);
 
@@ -311,7 +311,7 @@ where
 		// Make the Snowbridge sovereign on AH the default claimer.
 		let default_claimer = Location::new(0, [AccountId32 { network: None, id: bridge_owner }]);
 
-		let claimer = message.claimer.take().unwrap_or(default_claimer);
+		let claimer = message.claimer.unwrap_or(default_claimer);
 
 		// Set claimer before PayFees, in case the fees are not enough. Then the claimer will be
 		// able to claim the funds still.
@@ -326,11 +326,11 @@ where
 		let mut reserve_deposit_assets = vec![];
 		let mut reserve_withdraw_assets = vec![];
 
-		for asset in message.assets.clone() {
+		for asset in message.assets {
 			match asset {
 				AssetTransfer::ReserveDeposit(asset) => reserve_deposit_assets.push(asset),
 				AssetTransfer::ReserveWithdraw(asset) => reserve_withdraw_assets.push(asset),
-			}
+			};
 		}
 
 		instructions.push(ReserveAssetDeposited(reserve_deposit_assets.into()));
@@ -345,7 +345,7 @@ where
 			));
 		}
 
-		// Append the remote instructions (without the topic, if it was present).
+		// Add the XCM sent in the message to the end of the xcm instruction
 		instructions.extend(message.remote_xcm.0);
 
 		Ok(instructions.into())
