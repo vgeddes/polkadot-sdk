@@ -15,7 +15,7 @@ pub mod reward;
 pub mod ringbuffer;
 pub mod sparse_bitmap;
 
-pub use location::{AgentId, AgentIdOf, TokenId, TokenIdOf};
+pub use location::{AgentId, AgentIdOf, LocationHashOf, TokenId, TokenIdOf};
 pub use polkadot_parachain_primitives::primitives::{
 	Id as ParaId, IsSystem, Sibling as SiblingParaId,
 };

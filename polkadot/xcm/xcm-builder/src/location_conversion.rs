@@ -110,6 +110,70 @@ impl DescribeLocation for DescribeBodyTerminal {
 	}
 }
 
+pub struct DescribeGeneralIndexTerminal;
+impl DescribeLocation for DescribeGeneralIndexTerminal {
+	fn describe_location(l: &Location) -> Option<Vec<u8>> {
+		match l.unpack() {
+			(0, [GeneralIndex(index)]) => Some((b"GeneralIndex", *index).encode()),
+			_ => return None,
+		}
+	}
+}
+
+pub struct DescribeGeneralKeyTerminal;
+impl DescribeLocation for DescribeGeneralKeyTerminal {
+	fn describe_location(l: &Location) -> Option<Vec<u8>> {
+		match l.unpack() {
+			(0, [GeneralKey { data, .. }]) => Some((b"GeneralKey", *data).encode()),
+			_ => return None,
+		}
+	}
+}
+
+pub struct DescribePalletInstanceThenGeneralIndexTerminal;
+impl DescribeLocation for DescribePalletInstanceThenGeneralIndexTerminal {
+	fn describe_location(l: &Location) -> Option<Vec<u8>> {
+		match l.unpack() {
+			(0, [PalletInstance(instance), GeneralIndex(index)]) =>
+				Some((b"Pallet", *instance, b"GeneralIndex", *index).encode()),
+			_ => return None,
+		}
+	}
+}
+
+pub struct DescribePalletInstanceThenGeneralKeyTerminal;
+impl DescribeLocation for DescribePalletInstanceThenGeneralKeyTerminal {
+	fn describe_location(l: &Location) -> Option<Vec<u8>> {
+		match l.unpack() {
+			(0, [PalletInstance(instance), GeneralKey { data, .. }]) =>
+				Some((b"Pallet", *instance, b"GeneralKey", *data).encode()),
+			_ => return None,
+		}
+	}
+}
+
+pub struct DescribePalletInstanceThenAccountId32Terminal;
+impl DescribeLocation for DescribePalletInstanceThenAccountId32Terminal {
+	fn describe_location(l: &Location) -> Option<Vec<u8>> {
+		match l.unpack() {
+			(0, [PalletInstance(instance), AccountId32 { id, .. }]) =>
+				Some((b"Pallet", *instance, b"AccountId32", *id).encode()),
+			_ => return None,
+		}
+	}
+}
+
+pub struct DescribePalletInstanceThenAccountKey20Terminal;
+impl DescribeLocation for DescribePalletInstanceThenAccountKey20Terminal {
+	fn describe_location(l: &Location) -> Option<Vec<u8>> {
+		match l.unpack() {
+			(0, [PalletInstance(instance), AccountKey20 { key, .. }]) =>
+				Some((b"Pallet", *instance, b"AccountKey20", *key).encode()),
+			_ => return None,
+		}
+	}
+}
+
 pub type DescribeAllTerminal = (
 	DescribeTerminus,
 	DescribePalletTerminal,
@@ -117,6 +181,12 @@ pub type DescribeAllTerminal = (
 	DescribeAccountKey20Terminal,
 	DescribeTreasuryVoiceTerminal,
 	DescribeBodyTerminal,
+	DescribeGeneralIndexTerminal,
+	DescribeGeneralKeyTerminal,
+	DescribePalletInstanceThenGeneralIndexTerminal,
+	DescribePalletInstanceThenGeneralKeyTerminal,
+	DescribePalletInstanceThenAccountId32Terminal,
+	DescribePalletInstanceThenAccountKey20Terminal,
 );
 
 pub struct DescribeFamily<DescribeInterior>(PhantomData<DescribeInterior>);

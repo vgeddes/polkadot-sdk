@@ -23,23 +23,40 @@ pub type AgentId = H256;
 
 /// Creates an AgentId from a Location. An AgentId is a unique mapping to an Agent contract on
 /// Ethereum which acts as the sovereign account for the Location.
-/// Resolves Polkadot locations (as seen by Ethereum) to unique `AgentId` identifiers.
-pub type AgentIdOf = HashedDescription<
-	AgentId,
-	(
-		DescribeTerminus,
-		DescribeFamily<DescribeAllTerminal>,
-		DescribeGlobalPrefix<(DescribeTerminus, DescribeFamily<DescribeTokenTerminal>)>,
-	),
->;
+#[deprecated(note = "Use LocationHashOf instead.")]
+pub type AgentIdOf =
+	HashedDescription<AgentId, (DescribeHere, DescribeFamily<DescribeAllTerminal>)>;
 
 pub type TokenId = H256;
 
 /// Convert a token location (relative to Ethereum) to a stable ID that can be used on the Ethereum
 /// side
+#[deprecated(note = "Use LocationHashOf instead.")]
 pub type TokenIdOf = HashedDescription<
 	TokenId,
-	DescribeGlobalPrefix<(DescribeTerminus, DescribeFamily<DescribeTokenTerminal>)>,
+	DescribeForEthereum<(DescribeTerminus, DescribeFamily<DescribeSnowbridgeTerminal>)>,
+>;
+
+/// Resolves Polkadot locations (as seen by Ethereum) to unique `H256` identifiers.
+/// All V1 converters are inherited here for backwards compatibility
+/// With AliasOrigin enforced in V2 the user origin from source chain will be reserved and sent to
+/// Ethereum.
+/// For asset transfers, the legacy AH agent ID is hardcoded in the V2 contract side,
+/// which ignores the user origin, so there won't be any compatibility issue.
+/// For transact calls, the user origin will be respected in the V2 contract side, but won't
+/// conflict with the legacy AH.
+pub type LocationHashOf = HashedDescription<
+	H256,
+	(
+		// To ensure compatible with V1 for agent of BH.
+		DescribeHere,
+		// To ensure compatible with V1 for agent of AH.
+		DescribeFamily<DescribeAllTerminal>,
+		// To ensure compatible with V1 for polkadot native assets
+		DescribeForEthereum<(DescribeTerminus, DescribeFamily<DescribeSnowbridgeTerminal>)>,
+		// Use this for all reanchored locations in V2, require an enhanced `DescribeAllTerminal`
+		DescribeForEthereum<(DescribeTerminus, DescribeFamily<DescribeAllTerminal>)>,
+	),
 >;
 
 /// This looks like DescribeTerminus that was added to xcm-builder. However this does an extra
@@ -57,10 +74,12 @@ impl DescribeLocation for DescribeHere {
 		}
 	}
 }
-pub struct DescribeGlobalPrefix<DescribeInterior>(sp_std::marker::PhantomData<DescribeInterior>);
-impl<Suffix: DescribeLocation> DescribeLocation for DescribeGlobalPrefix<Suffix> {
+pub struct DescribeForEthereum<DescribeInterior>(sp_std::marker::PhantomData<DescribeInterior>);
+impl<Suffix: DescribeLocation> DescribeLocation for DescribeForEthereum<Suffix> {
 	fn describe_location(l: &Location) -> Option<Vec<u8>> {
 		match (l.parent_count(), l.first_interior()) {
+			// Parent is 1 just because location is already reanchored on AH relative to ethereum
+			// (2, GlobalConsensus(Ethereum)) context
 			(1, Some(GlobalConsensus(network))) => {
 				let mut tail = l.clone().split_first_interior().0;
 				tail.dec_parent();
@@ -72,8 +91,9 @@ impl<Suffix: DescribeLocation> DescribeLocation for DescribeGlobalPrefix<Suffix>
 	}
 }
 
-pub struct DescribeTokenTerminal;
-impl DescribeLocation for DescribeTokenTerminal {
+#[deprecated(note = "Use DescribeAllTerminal from xcm-builder instead.")]
+pub struct DescribeSnowbridgeTerminal;
+impl DescribeLocation for DescribeSnowbridgeTerminal {
 	fn describe_location(l: &Location) -> Option<Vec<u8>> {
 		match l.unpack().1 {
 			[] => Some(Vec::<u8>::new().encode()),
@@ -102,7 +122,7 @@ impl DescribeLocation for DescribeTokenTerminal {
 
 #[cfg(test)]
 mod tests {
-	use crate::TokenIdOf;
+	use crate::{AgentIdOf, LocationHashOf, TokenIdOf};
 	use xcm::{
 		latest::WESTEND_GENESIS_HASH,
 		prelude::{
@@ -113,7 +133,7 @@ mod tests {
 	use xcm_executor::traits::ConvertLocation;
 
 	#[test]
-	fn test_token_of_id() {
+	fn test_token_id_fully_compatible() {
 		let token_locations = [
 			// Relay Chain cases
 			// Relay Chain relative to Ethereum
@@ -210,10 +230,13 @@ mod tests {
 		];
 
 		for token in token_locations {
-			assert!(
-				TokenIdOf::convert_location(&token).is_some(),
-				"Valid token = {token:?} yields no TokenId."
-			);
+			let token_id = TokenIdOf::convert_location(&token).unwrap();
+			let token_id_v2 = LocationHashOf::convert_location(&token).unwrap();
+			// which means V2 is not compatible with V1
+			if token_id != token_id_v2 {
+				println!("tokenId in V2 is not compatible with V1: {:?}", token)
+			}
+			assert_eq!(token_id, token_id_v2);
 		}
 
 		let non_token_locations = [
@@ -228,6 +251,134 @@ mod tests {
 				TokenIdOf::convert_location(&token).is_none(),
 				"Invalid token = {token:?} yields a TokenId."
 			);
+		}
+	}
+
+	#[test]
+	fn test_agent_id_fully_compatible() {
+		// Agent locations in V1 are not reanchored
+		let legacy_agent_locations = [
+			// asset hub
+			Location::new(1, [Parachain(1000)]),
+			// acala
+			Location::new(1, [Parachain(2000)]),
+			// relay chain
+			Location::new(1, []),
+			// here
+			Location::new(0, []),
+		];
+
+		for location in legacy_agent_locations {
+			let agent_id = AgentIdOf::convert_location(&location).unwrap();
+			let agent_id_v2 = LocationHashOf::convert_location(&location).unwrap();
+			// which means V2 is not compatible with V1
+			if agent_id != agent_id_v2 {
+				println!("agentId in V2 is not compatible with V1: {:?}", location)
+			}
+			assert_eq!(agent_id, agent_id_v2);
+		}
+
+		// Agent locations in V2 are reanchored, which is not supported by V1 converter
+		let agent_locations = [
+			// Relay Chain cases
+			// Relay Chain relative to Ethereum
+			Location::new(1, [GlobalConsensus(ByGenesis(WESTEND_GENESIS_HASH))]),
+			// Parachain cases
+			// Parachain relative to Ethereum
+			Location::new(1, [GlobalConsensus(ByGenesis(WESTEND_GENESIS_HASH)), Parachain(2000)]),
+			// Parachain general index
+			Location::new(
+				1,
+				[
+					GlobalConsensus(ByGenesis(WESTEND_GENESIS_HASH)),
+					Parachain(2000),
+					GeneralIndex(1),
+				],
+			),
+			// Parachain general key
+			Location::new(
+				1,
+				[
+					GlobalConsensus(ByGenesis(WESTEND_GENESIS_HASH)),
+					Parachain(2000),
+					GeneralKey { length: 32, data: [0; 32] },
+				],
+			),
+			// Parachain account key 20
+			Location::new(
+				1,
+				[
+					GlobalConsensus(ByGenesis(WESTEND_GENESIS_HASH)),
+					Parachain(2000),
+					AccountKey20 { network: None, key: [0; 20] },
+				],
+			),
+			// Parachain account id 32
+			Location::new(
+				1,
+				[
+					GlobalConsensus(ByGenesis(WESTEND_GENESIS_HASH)),
+					Parachain(2000),
+					AccountId32 { network: None, id: [0; 32] },
+				],
+			),
+			// Parchain Pallet instance cases
+			// Parachain pallet instance
+			Location::new(
+				1,
+				[
+					GlobalConsensus(ByGenesis(WESTEND_GENESIS_HASH)),
+					Parachain(2000),
+					PalletInstance(8),
+				],
+			),
+			// Parachain Pallet general index
+			Location::new(
+				1,
+				[
+					GlobalConsensus(ByGenesis(WESTEND_GENESIS_HASH)),
+					Parachain(2000),
+					PalletInstance(8),
+					GeneralIndex(1),
+				],
+			),
+			// Parachain Pallet general key
+			Location::new(
+				1,
+				[
+					GlobalConsensus(ByGenesis(WESTEND_GENESIS_HASH)),
+					Parachain(2000),
+					PalletInstance(8),
+					GeneralKey { length: 32, data: [0; 32] },
+				],
+			),
+			// Parachain Pallet account key 20
+			Location::new(
+				1,
+				[
+					GlobalConsensus(ByGenesis(WESTEND_GENESIS_HASH)),
+					Parachain(2000),
+					PalletInstance(8),
+					AccountKey20 { network: None, key: [0; 20] },
+				],
+			),
+			// Parachain Pallet account id 32
+			Location::new(
+				1,
+				[
+					GlobalConsensus(ByGenesis(WESTEND_GENESIS_HASH)),
+					Parachain(2000),
+					PalletInstance(8),
+					AccountId32 { network: None, id: [0; 32] },
+				],
+			),
+		];
+
+		for location in agent_locations {
+			let agent_id = AgentIdOf::convert_location(&location);
+			let agent_id_v2 = LocationHashOf::convert_location(&location);
+			assert_eq!(agent_id, None);
+			assert_ne!(agent_id_v2, None);
 		}
 	}
 }

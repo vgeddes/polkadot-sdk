@@ -135,7 +135,7 @@ impl snowbridge_pallet_system::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type OutboundQueue = MockOkOutboundQueueV1;
 	type SiblingOrigin = pallet_xcm_origin::EnsureXcm<AllowSiblingsOnly>;
-	type AgentIdOf = snowbridge_core::AgentIdOf;
+	type AgentIdOf = snowbridge_core::LocationHashOf;
 	type Token = Balances;
 	type TreasuryAccount = TreasuryAccount;
 	type DefaultPricingParameters = Parameters;
