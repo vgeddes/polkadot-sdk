@@ -113,16 +113,13 @@ where
 	) -> Result<(), Self::Error> {
 		let ethereum_location = Location::new(2, [GlobalConsensus(EthereumNetwork::get())]);
 
-		let total_amount: u128 = AssetHubXCMFee::get().saturating_add(reward.into());
-		let total_assets: Asset = (ethereum_location.clone(), total_amount).into();
-		let fee_asset: Asset = (ethereum_location, AssetHubXCMFee::get()).into();
+		let assets: Asset = (ethereum_location.clone(), reward).into();
 
 		let xcm: Xcm<()> = alloc::vec![
+			UnpaidExecution{ weight_limit: Unlimited, check_origin: None},
 			DescendOrigin(InboundQueueLocation::get().into()),
 			UniversalOrigin(GlobalConsensus(EthereumNetwork::get())),
-			ReserveAssetDeposited(total_assets.into()),
-			PayFees { asset: fee_asset },
-			RefundSurplus,
+			ReserveAssetDeposited(assets.into()),
 			DepositAsset { assets: AllCounted(1).into(), beneficiary },
 		]
 		.into();
@@ -247,7 +244,7 @@ mod tests {
 		>;
 
 		let result =
-			TestedPayAccountOnLocation::pay_reward(&relayer, NoOpReward, reward, beneficiary);
+			TestedPayAccountOnLocation::pay_reward(&relayer, (), reward, beneficiary);
 
 		assert!(result.is_ok());
 	}
@@ -286,7 +283,7 @@ mod tests {
 		let relayer = MockRelayer(AccountId32::new([1u8; 32]));
 		let reward = 1_000u128;
 		let beneficiary = Location::new(1, Here);
-		let result = FailingSenderPayAccount::pay_reward(&relayer, NoOpReward, reward, beneficiary);
+		let result = FailingSenderPayAccount::pay_reward(&relayer, (), reward, beneficiary);
 
 		assert!(result.is_err());
 		let err_str = format!("{:?}", result.err().unwrap());
@@ -334,7 +331,7 @@ mod tests {
 		let beneficiary = Location::new(1, Here);
 		let reward = 500u128;
 		let result =
-			FailingExecutorPayAccount::pay_reward(&relayer, NoOpReward, reward, beneficiary);
+			FailingExecutorPayAccount::pay_reward(&relayer, (), reward, beneficiary);
 
 		assert!(result.is_err());
 		let err_str = format!("{:?}", result.err().unwrap());
@@ -380,7 +377,7 @@ mod tests {
 		let beneficiary = Location::new(1, Here);
 		let reward = 123u128;
 		let result =
-			FailingDeliveryPayAccount::pay_reward(&relayer, NoOpReward, reward, beneficiary);
+			FailingDeliveryPayAccount::pay_reward(&relayer, (), reward, beneficiary);
 
 		assert!(result.is_err());
 		let err_str = format!("{:?}", result.err().unwrap());
