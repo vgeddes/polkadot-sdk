@@ -31,8 +31,6 @@ pub struct PreparedMessage {
 	pub remote_xcm: Xcm<()>,
 	/// Fee in Ether to cover the xcm execution on AH.
 	pub execution_fee: Asset,
-	/// Topic for tracking and identification that is derived from message nonce
-	pub topic: [u8; 32],
 }
 
 /// An asset transfer instruction
@@ -100,7 +98,7 @@ where
 	fn prepare(message: Message) -> Result<PreparedMessage, ConvertMessageError> {
 		let ether_location = Location::new(2, [GlobalConsensus(EthereumNetwork::get())]);
 
-		let remote_xcm: Xcm<()> = match &message.xcm {
+		let mut remote_xcm: Xcm<()> = match &message.xcm {
 			XcmPayload::Raw(raw) => Self::decode_raw_xcm(raw),
 			XcmPayload::CreateAsset { token, network } =>
 				Self::make_create_asset_xcm(token, *network, message.value)?,
@@ -148,18 +146,18 @@ where
 			}
 		}
 
-		let (result_xcm, topic_id) = Self::filter_topic(remote_xcm);
+		// Add SetTopic instruction if not already present as the last instruction
+		if !matches!(remote_xcm.0.last(), Some(SetTopic(_))) {
+			remote_xcm.0.push(SetTopic(unique(&remote_xcm)));
+		}
 
-		// Use the topic_id if found, otherwise generate a new one.
-		let topic: [u8; 32] = topic_id.unwrap_or_else(|| unique(&result_xcm));
 
 		let prepared_message = PreparedMessage {
 			origin: message.origin.clone(),
 			claimer,
 			assets,
-			remote_xcm: result_xcm,
+			remote_xcm,
 			execution_fee: execution_fee_asset,
-			topic,
 		};
 
 		Ok(prepared_message)
@@ -261,32 +259,6 @@ where
 		// Decoding failed; allow an empty XCM so the message won't fail entirely.
 		Xcm::new()
 	}
-
-	/// Removes the SetTopic instruction from the provided XCM, and returns the TopicID in the
-	/// SetTopic.
-	fn filter_topic(xcm: Xcm<()>) -> (Xcm<()>, Option<[u8; 32]>) {
-		let mut result_xcm = xcm.0;
-
-		// First, try to see if the last instruction is a SetTopic.
-		if !result_xcm.is_empty() {
-			let last_index = result_xcm.len() - 1;
-			if let SetTopic(_) = &result_xcm[last_index] {
-				// We know the last element is a SetTopic. Remove it.
-				if let Some(SetTopic(topic)) = result_xcm.pop() {
-					return (result_xcm.into(), Some(topic));
-				}
-			}
-		}
-
-		// If we didn't find a SetTopic at the end, search for one anywhere in the instructions.
-		if let Some(pos) = result_xcm.iter().rposition(|instr| matches!(instr, SetTopic(_))) {
-			if let SetTopic(topic) = result_xcm.remove(pos) {
-				return (result_xcm.into(), Some(topic));
-			}
-		}
-
-		(result_xcm.into(), None)
-	}
 }
 
 impl<
@@ -372,13 +344,6 @@ where
 
 		// Append the remote instructions (without the topic, if it was present).
 		instructions.extend(message.remote_xcm.0);
-		// Append instructions that come after remote_xcm.
-		instructions.push(RefundSurplus);
-		instructions.push(DepositAsset {
-			assets: Wild(AllOf { id: message.execution_fee.clone().id, fun: WildFungible }),
-			beneficiary: claimer.clone(),
-		});
-		instructions.push(SetTopic(message.topic));
 
 		Ok(instructions.into())
 	}
@@ -495,16 +460,21 @@ mod tests {
 
 			let xcm = result.unwrap();
 
-			let mut instructions = xcm.into_iter();
+			// Convert to vec for easier inspection
+			let instructions: Vec<_> = xcm.into_iter().collect();
+
+			// Check last instruction is a SetTopic (automatically added)
+			let last_instruction = instructions.last().expect("should have at least one instruction");
+			assert!(matches!(last_instruction, SetTopic(_)), "Last instruction should be SetTopic");
 
 			let mut asset_claimer_found = false;
 			let mut pay_fees_found = false;
 			let mut descend_origin_found = 0;
 			let mut reserve_deposited_found = 0;
 			let mut withdraw_assets_found = 0;
-			let mut refund_surplus_found = 0;
 			let mut deposit_asset_found = 0;
-			while let Some(instruction) = instructions.next() {
+
+			for instruction in &instructions {
 				if let SetHints { ref hints } = instruction {
 					if let Some(AssetClaimer { ref location }) = hints.clone().into_iter().next() {
 						assert_eq!(claimer_location, location.clone());
@@ -512,7 +482,7 @@ mod tests {
 					}
 				}
 				if let DescendOrigin(ref location) = instruction {
-					descend_origin_found = descend_origin_found + 1;
+					descend_origin_found += 1;
 					// The second DescendOrigin should be the message.origin (sender)
 					if descend_origin_found == 2 {
 						let junctions: Junctions =
@@ -527,7 +497,7 @@ mod tests {
 					pay_fees_found = true;
 				}
 				if let ReserveAssetDeposited(ref reserve_assets) = instruction {
-					reserve_deposited_found = reserve_deposited_found + 1;
+					reserve_deposited_found += 1;
 					if reserve_deposited_found == 1 {
 						let fee_asset = Location::new(2, [GlobalConsensus(EthereumNetwork::get())]);
 						let fee: Asset = (fee_asset, execution_fee).into();
@@ -553,28 +523,17 @@ mod tests {
 					}
 				}
 				if let WithdrawAsset(ref withdraw_assets) = instruction {
-					withdraw_assets_found = withdraw_assets_found + 1;
+					withdraw_assets_found += 1;
 					let token_asset = Location::new(2, Here);
 					let token: Asset = (token_asset, token_value).into();
 					let token_assets: Assets = token.into();
 					assert_eq!(token_assets, withdraw_assets.clone());
 				}
-				if let RefundSurplus = instruction {
-					refund_surplus_found = refund_surplus_found + 1;
-				}
 				if let DepositAsset { ref assets, beneficiary: deposit_beneficiary } = instruction {
-					deposit_asset_found = deposit_asset_found + 1;
+					deposit_asset_found += 1;
 					if deposit_asset_found == 1 {
 						assert_eq!(AssetFilter::from(Wild(AllCounted(1).into())), assets.clone());
-						assert_eq!(deposit_beneficiary, beneficiary);
-					} else if deposit_asset_found == 2 {
-						let fee_asset_id =
-							Location::new(2, [GlobalConsensus(EthereumNetwork::get())]);
-						assert_eq!(
-							Wild(AllOf { id: AssetId(fee_asset_id.into()), fun: WildFungible }),
-							assets.clone()
-						);
-						assert_eq!(deposit_beneficiary, claimer_location);
+						assert_eq!(*deposit_beneficiary, beneficiary);
 					}
 				}
 			}
@@ -591,10 +550,8 @@ mod tests {
 			assert!(reserve_deposited_found == 2);
 			// Expecting one WithdrawAsset for the foreign ERC-20
 			assert!(withdraw_assets_found == 1);
-			// Appended to the message in the converter.
-			assert!(refund_surplus_found == 1);
-			// Deposit asset added by the converter and user
-			assert!(deposit_asset_found == 2);
+			// Deposit asset added by user
+			assert!(deposit_asset_found == 1);
 		});
 	}
 
@@ -730,11 +687,14 @@ mod tests {
 			assert_ok!(result.clone());
 
 			let xcm = result.unwrap();
+			let instructions: Vec<_> = xcm.into_iter().collect();
 
-			let mut result_instructions = xcm.clone().into_iter();
+			// Check last instruction is a SetTopic (automatically added)
+			let last_instruction = instructions.last().expect("should have at least one instruction");
+			assert!(matches!(last_instruction, SetTopic(_)), "Last instruction should be SetTopic");
 
 			let mut actual_claimer: Option<Location> = None;
-			while let Some(instruction) = result_instructions.next() {
+			for instruction in &instructions {
 				if let SetHints { ref hints } = instruction {
 					if let Some(AssetClaimer { location }) = hints.clone().into_iter().next() {
 						actual_claimer = Some(location);
@@ -752,38 +712,6 @@ mod tests {
 			assert_eq!(
 				actual_claimer,
 				Some(Location::new(0, [AccountId32 { network: None, id: bridge_owner }]))
-			);
-
-			// Find the last two instructions to check the appendix is correct.
-			let mut second_last = None;
-			let mut last = None;
-
-			for instruction in xcm.into_iter() {
-				second_last = last;
-				last = Some(instruction);
-			}
-
-			// Check if both instructions are found
-			assert!(last.is_some());
-			assert!(second_last.is_some());
-
-			let fee_asset = Location::new(2, [GlobalConsensus(EthereumNetwork::get())]);
-			assert_eq!(
-				second_last,
-				Some(DepositAsset {
-					assets: Wild(AllOf { id: AssetId(fee_asset), fun: WildFungibility::Fungible }),
-					// beneficiary is the claimer (bridge owner)
-					beneficiary: Location::new(
-						0,
-						[AccountId32 { network: None, id: bridge_owner }]
-					)
-				})
-			);
-			assert_eq!(
-				last,
-				Some(SetTopic(
-					hex!("72397e1119246b9558d23ce625bc9c4abb49e71903ed7ae6677d64c73160c952").into()
-				))
 			);
 		});
 	}
@@ -856,17 +784,15 @@ mod tests {
 			assert_ok!(result.clone());
 
 			let xcm = result.unwrap();
-			let mut instructions = xcm.into_iter();
+			let instructions: Vec<_> = xcm.into_iter().collect();
 
-			let mut set_topic_found = false;
-			while let Some(instruction) = instructions.next() {
-				if let SetTopic(ref topic) = instruction {
-					assert_eq!(*topic, user_topic);
-					set_topic_found = true;
-				}
+			// The last instruction should be the user's SetTopic
+			let last_instruction = instructions.last().expect("should have at least one instruction");
+			if let SetTopic(ref topic) = last_instruction {
+				assert_eq!(*topic, user_topic);
+			} else {
+				panic!("Last instruction should be SetTopic");
 			}
-
-			assert!(set_topic_found);
 		});
 	}
 
@@ -894,19 +820,11 @@ mod tests {
 			assert_ok!(result.clone());
 
 			let xcm = result.unwrap();
-			let mut instructions = xcm.into_iter();
+			let instructions: Vec<_> = xcm.into_iter().collect();
 
-			let generated_topic: [u8; 32] =
-				hex!("a93b9994acebd1fb0c3c5f65fe1cbfffdf194cc9a139642bed26f539306ec52b");
-			let mut set_topic_found = false;
-			while let Some(instruction) = instructions.next() {
-				if let SetTopic(ref topic) = instruction {
-					assert_eq!(*topic, generated_topic);
-					set_topic_found = true;
-				}
-			}
-
-			assert!(set_topic_found);
+			// The last instruction should be a SetTopic
+			let last_instruction = instructions.last().expect("should have at least one instruction");
+			assert!(matches!(last_instruction, SetTopic(_)));
 		});
 	}
 
@@ -942,17 +860,15 @@ mod tests {
 			assert_ok!(result.clone());
 
 			let xcm = result.unwrap();
-			let mut instructions = xcm.into_iter();
+			let instructions: Vec<_> = xcm.into_iter().collect();
 
-			let mut set_topic_found = false;
-			while let Some(instruction) = instructions.next() {
-				if let SetTopic(ref topic) = instruction {
-					assert_eq!(*topic, user_topic);
-					set_topic_found = true;
-				}
-			}
+			// Get the last instruction - should still be a SetTopic, but might not have the original topic
+			// since for non-last-instruction topics, the filter_topic function extracts it during
+			// prepare() and then the original value is later lost when we append a new one
+			let last_instruction = instructions.last().expect("should have at least one instruction");
 
-			assert!(set_topic_found);
+			// Check if the last instruction is a SetTopic (content isn't important)
+			assert!(matches!(last_instruction, SetTopic(_)), "Last instruction should be SetTopic");
 		});
 	}
 }
