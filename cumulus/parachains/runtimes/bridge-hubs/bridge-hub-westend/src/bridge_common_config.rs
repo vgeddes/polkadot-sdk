@@ -122,7 +122,6 @@ impl bp_relayers::PaymentProcedure<AccountId, BridgeReward, u128> for BridgeRewa
 							u128,
 							EthereumNetwork,
 							AssetHubLocation,
-							AssetHubXCMFee,
 							InboundQueueLocation,
 							XcmRouter,
 							XcmExecutor<XcmConfig>,

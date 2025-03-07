@@ -43,7 +43,6 @@ pub struct PayAccountOnLocation<
 	RewardBalance,
 	EthereumNetwork,
 	AssetHubLocation,
-	AssetHubXCMFee,
 	InboundQueueLocation,
 	XcmSender,
 	XcmExecutor,
@@ -54,7 +53,6 @@ pub struct PayAccountOnLocation<
 		RewardBalance,
 		EthereumNetwork,
 		AssetHubLocation,
-		AssetHubXCMFee,
 		InboundQueueLocation,
 		XcmSender,
 		XcmExecutor,
@@ -67,7 +65,6 @@ impl<
 		RewardBalance,
 		EthereumNetwork,
 		AssetHubLocation,
-		AssetHubXCMFee,
 		InboundQueueLocation,
 		XcmSender,
 		XcmExecutor,
@@ -78,7 +75,6 @@ impl<
 		RewardBalance,
 		EthereumNetwork,
 		AssetHubLocation,
-		AssetHubXCMFee,
 		InboundQueueLocation,
 		XcmSender,
 		XcmExecutor,
@@ -96,7 +92,6 @@ where
 	EthereumNetwork: Get<NetworkId>,
 	InboundQueueLocation: Get<InteriorLocation>,
 	AssetHubLocation: Get<Location>,
-	AssetHubXCMFee: Get<u128>,
 	XcmSender: SendXcm,
 	RewardBalance: Into<u128> + Clone,
 	XcmExecutor: ExecuteXcm<Call>,
@@ -112,8 +107,7 @@ where
 		beneficiary: Self::Beneficiary,
 	) -> Result<(), Self::Error> {
 		let ethereum_location = Location::new(2, [GlobalConsensus(EthereumNetwork::get())]);
-
-		let assets: Asset = (ethereum_location.clone(), reward).into();
+		let assets: Asset = (ethereum_location.clone(), reward.into()).into();
 
 		let xcm: Xcm<()> = alloc::vec![
 			UnpaidExecution{ weight_limit: Unlimited, check_origin: None},
