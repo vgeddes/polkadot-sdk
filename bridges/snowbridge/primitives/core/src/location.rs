@@ -109,7 +109,7 @@ impl DescribeLocation for DescribeTokenTerminal {
 /// Conversion implementation which converts from a `[u8; 32]`-based `AccountId` into a
 /// `Location` consisting solely of a `AccountId32` junction with a fixed value for its
 /// network and the `AccountId`'s `[u8; 32]` datum for the `id`.
-pub struct AccountToLocation<AccountId>(PhantomData<(AccountId)>);
+pub struct AccountToLocation<AccountId>(PhantomData<AccountId>);
 impl<AccountId: Clone + Into<[u8; 32]> + Clone, Location: core::convert::From<Junction>>
 	Convert<AccountId, Location> for AccountToLocation<AccountId>
 {

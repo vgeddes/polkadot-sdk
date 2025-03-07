@@ -135,12 +135,6 @@ pub mod pallet {
 			message: Xcm<()>,
 			message_id: XcmHash,
 		},
-		RewardTipAdded {
-			origin: Location,
-			message_id: MessageId,
-			asset: Asset,
-			xcm_message_id: XcmHash,
-		},
 		/// Set OperatingMode
 		ExportOperatingModeChanged { mode: BasicOperatingMode },
 	}
@@ -294,11 +288,11 @@ pub mod pallet {
 				Self::send_xcm(local_pallet_origin, who_location, dest.clone(), remote_xcm.clone())
 					.map_err(|error| Error::<T>::from(error))?;
 
-			Self::deposit_event(Event::<T>::RewardTipAdded {
+			Self::deposit_event(Event::<T>::MessageSent {
 				origin: T::PalletLocation::get().into(),
-				message_id,
-				asset,
-				xcm_message_id,
+				destination: dest,
+				message: remote_xcm,
+				message_id: xcm_message_id,
 			});
 
 			Ok(())

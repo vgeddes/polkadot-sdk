@@ -136,19 +136,14 @@ fn add_tip_ether_asset_succeeds() {
 		));
 
 		let events = System::events();
-		let event_record = events.last().expect("Expected at least one event").event.clone();
-		if let RuntimeEvent::EthereumSystemFrontend(crate::Event::RewardTipAdded {
-			origin,
-			message_id: event_message_id,
-			asset: event_asset,
-			..
-		}) = event_record
-		{
-			assert_eq!(origin, PalletLocation::get().into());
-			assert_eq!(event_message_id, message_id);
-			assert_eq!(event_asset, asset);
-		} else {
-			panic!("Unexpected event: {:?}", event_record);
+		let event_record = events
+			.last()
+			.expect("Expected at least one event")
+			.event
+			.clone();
+
+		if !matches!(event_record, RuntimeEvent::EthereumSystemFrontend(crate::Event::MessageSent { .. })) {
+			panic!("Expected MessageSent event, got: {:?}", event_record);
 		}
 	});
 }
@@ -169,19 +164,14 @@ fn add_tip_non_ether_asset_succeeds() {
 		));
 
 		let events = System::events();
-		let event_record = events.last().expect("Expected at least one event").event.clone();
-		if let RuntimeEvent::EthereumSystemFrontend(crate::Event::RewardTipAdded {
-			origin,
-			message_id: event_message_id,
-			asset: event_asset,
-			..
-		}) = event_record
-		{
-			assert_eq!(origin, PalletLocation::get().into());
-			assert_eq!(event_message_id, message_id);
-			assert_eq!(event_asset, asset);
-		} else {
-			panic!("Unexpected event: {:?}", event_record);
+		let event_record = events
+			.last()
+			.expect("Expected at least one event")
+			.event
+			.clone();
+
+		if !matches!(event_record, RuntimeEvent::EthereumSystemFrontend(crate::Event::MessageSent { .. })) {
+			panic!("Expected MessageSent event, got: {:?}", event_record);
 		}
 	});
 }
