@@ -164,7 +164,7 @@ pub mod pallet {
 		InvalidAccount,
 		/// Provided tip asset could not be swapped for ether.
 		SwapError,
-		/// Ether could not be burned.a
+		/// Ether could not be burned.
 		BurnError,
 	}
 
