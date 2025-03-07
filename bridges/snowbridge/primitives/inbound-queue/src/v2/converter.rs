@@ -218,6 +218,7 @@ where
 		eth_asset: xcm::prelude::Asset,
 	) -> Xcm<()> {
 		vec![
+			RefundSurplus,
 			// Exchange eth for dot to pay the asset creation deposit.
 			ExchangeAsset {
 				give: eth_asset.into(),
@@ -226,7 +227,7 @@ where
 			},
 			// Deposit the dot deposit into the bridge sovereign account (where the asset
 			// creation fee will be deducted from).
-			DepositAsset { assets: dot_fee_asset.clone().into(), beneficiary: bridge_owner.into() },
+			DepositAsset { assets: dot_fee_asset.clone().into(), beneficiary: bridge_owner.clone().into() },
 			// Call to create the asset.
 			Transact {
 				origin_kind: OriginKind::Xcm,
@@ -240,6 +241,8 @@ where
 					.encode()
 					.into(),
 			},
+			// Deposit leftover funds to Snowbridge sovereign
+			DepositAsset { assets: Wild(AllCounted(2)), beneficiary: bridge_owner.clone().into() },
 		]
 		.into()
 	}
