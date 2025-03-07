@@ -27,6 +27,8 @@ pub mod abi {
 			bytes32 origin;
 			// Message nonce
 			uint64 nonce;
+			// Topic
+			bytes32 topic;
 			// Commands
 			CommandWrapper[] commands;
 		}
