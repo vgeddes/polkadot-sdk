@@ -212,13 +212,9 @@ pub mod pallet {
 			let call =
 				Self::build_register_token_call(&origin_location, &asset_location, metadata)?;
 			let remote_xcm = Self::build_remote_xcm(&call);
-			let message_id = Self::send_xcm(
-				origin_location.clone(),
-				origin_location,
-				dest.clone(),
-				remote_xcm.clone(),
-			)
-			.map_err(|error| Error::<T>::from(error))?;
+			let message_id =
+				Self::send_xcm(origin_location, dest.clone(), remote_xcm.clone())
+					.map_err(|error| Error::<T>::from(error))?;
 
 			Self::deposit_event(Event::<T>::MessageSent {
 				origin: T::PalletLocation::get().into(),
@@ -280,12 +276,11 @@ pub mod pallet {
 			let dest = T::BridgeHubLocation::get();
 			let call = Self::build_add_tip_call(who.clone(), message_id.clone(), ether_gained);
 			let remote_xcm = Self::build_remote_xcm(&call);
-			let local_pallet_origin: Location = T::PalletLocation::get().into();
 			let who_location =
 				T::AccountToLocation::try_convert(&who).map_err(|_| Error::<T>::InvalidAccount)?;
 
 			let xcm_message_id =
-				Self::send_xcm(local_pallet_origin, who_location, dest.clone(), remote_xcm.clone())
+				Self::send_xcm(who_location, dest.clone(), remote_xcm.clone())
 					.map_err(|error| Error::<T>::from(error))?;
 
 			Self::deposit_event(Event::<T>::MessageSent {
@@ -302,7 +297,6 @@ pub mod pallet {
 	impl<T: Config> Pallet<T> {
 		fn send_xcm(
 			origin: Location,
-			sender: Location,
 			dest: Location,
 			xcm: Xcm<()>,
 		) -> Result<XcmHash, SendError> {
@@ -310,7 +304,7 @@ pub mod pallet {
 				<T::XcmExecutor as FeeManager>::is_waived(Some(&origin), FeeReason::ChargeFees);
 			let (ticket, price) = validate_send::<T::XcmSender>(dest, xcm.clone())?;
 			if !is_waived {
-				T::XcmExecutor::charge_fees(sender, price).map_err(|_| SendError::Fees)?;
+				T::XcmExecutor::charge_fees(origin, price).map_err(|_| SendError::Fees)?;
 			}
 			T::XcmSender::deliver(ticket)
 		}

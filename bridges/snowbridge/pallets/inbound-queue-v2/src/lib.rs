@@ -258,7 +258,7 @@ pub mod pallet {
 				})?;
 
 			// Get the tip and remove it from storage, if a tip was added.
-			let tip = Tips::<T>::take(message.nonce);
+			let tip = Tips::<T>::take(nonce);
 			let total_reward = match tip {
 				Some(amount) => relayer_fee.saturating_add(amount),
 				None => relayer_fee,
