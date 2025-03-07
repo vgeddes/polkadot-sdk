@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2023 Snowfork <hello@snowfork.com>
 //! Converts messages from Ethereum to XCM messages
 
-use crate::Log;
+use crate::{v2::IGatewayV2::Payload, Log};
 use alloy_core::{
 	primitives::B256,
 	sol,
@@ -148,51 +148,15 @@ impl TryFrom<&Log> for Message {
 		// Convert to B256 for Alloy decoding
 		let topics: Vec<B256> = log.topics.iter().map(|x| B256::from_slice(x.as_ref())).collect();
 
-		let mut substrate_assets = vec![];
-
 		// Decode the Solidity event from raw logs
 		let event = IGatewayV2::OutboundMessageAccepted::decode_raw_log(topics, &log.data, true)
 			.map_err(|_| MessageDecodeError)?;
 
 		let payload = event.payload;
 
-		for asset in payload.assets {
-			match asset.kind {
-				0 => {
-					let native_data = IGatewayV2::AsNativeTokenERC20::abi_decode(&asset.data, true)
-						.map_err(|_| MessageDecodeError)?;
-					substrate_assets.push(EthereumAsset::NativeTokenERC20 {
-						token_id: H160::from(native_data.token_id.as_ref()),
-						value: native_data.value,
-					});
-				},
-				1 => {
-					let foreign_data =
-						IGatewayV2::AsForeignTokenERC20::abi_decode(&asset.data, true)
-							.map_err(|_| MessageDecodeError)?;
-					substrate_assets.push(EthereumAsset::ForeignTokenERC20 {
-						token_id: H256::from(foreign_data.token_id.as_ref()),
-						value: foreign_data.value,
-					});
-				},
-				_ => return Err(MessageDecodeError),
-			}
-		}
+		let substrate_assets = Self::extract_assets(&payload)?;
 
-		let xcm = match payload.xcm.kind {
-			0 => XcmPayload::Raw(payload.xcm.data.to_vec()),
-			1 => {
-				let create_asset = IGatewayV2::XcmCreateAsset::abi_decode(&payload.xcm.data, true)
-					.map_err(|_| MessageDecodeError)?;
-				// Convert u8 network to Network enum
-				let network = match create_asset.network {
-					0 => Network::Polkadot,
-					_ => return Err(MessageDecodeError),
-				};
-				XcmPayload::CreateAsset { token: H160::from(create_asset.token.as_ref()), network }
-			},
-			_ => return Err(MessageDecodeError),
-		};
+		let xcm = XcmPayload::try_from(&payload)?;
 
 		let mut claimer = None;
 		if payload.claimer.len() > 0 {
@@ -212,6 +176,67 @@ impl TryFrom<&Log> for Message {
 		};
 
 		Ok(message)
+	}
+}
+
+impl Message {
+	fn extract_assets(
+		payload: &IGatewayV2::Payload,
+	) -> Result<Vec<EthereumAsset>, MessageDecodeError> {
+		let mut substrate_assets = vec![];
+		for asset in &payload.assets {
+			substrate_assets.push(EthereumAsset::try_from(asset)?);
+		}
+		Ok(substrate_assets)
+	}
+}
+
+impl TryFrom<&IGatewayV2::Payload> for XcmPayload {
+	type Error = MessageDecodeError;
+
+	fn try_from(payload: &Payload) -> Result<Self, Self::Error> {
+		let xcm = match payload.xcm.kind {
+			0 => XcmPayload::Raw(payload.xcm.data.to_vec()),
+			1 => {
+				let create_asset = IGatewayV2::XcmCreateAsset::abi_decode(&payload.xcm.data, true)
+					.map_err(|_| MessageDecodeError)?;
+				// Convert u8 network to Network enum
+				let network = match create_asset.network {
+					0 => Network::Polkadot,
+					_ => return Err(MessageDecodeError),
+				};
+				XcmPayload::CreateAsset { token: H160::from(create_asset.token.as_ref()), network }
+			},
+			_ => return Err(MessageDecodeError),
+		};
+		Ok(xcm)
+	}
+}
+
+impl TryFrom<&IGatewayV2::EthereumAsset> for EthereumAsset {
+	type Error = MessageDecodeError;
+
+	fn try_from(asset: &IGatewayV2::EthereumAsset) -> Result<EthereumAsset, Self::Error> {
+		let asset = match asset.kind {
+			0 => {
+				let native_data = IGatewayV2::AsNativeTokenERC20::abi_decode(&asset.data, true)
+					.map_err(|_| MessageDecodeError)?;
+				EthereumAsset::NativeTokenERC20 {
+					token_id: H160::from(native_data.token_id.as_ref()),
+					value: native_data.value,
+				}
+			},
+			1 => {
+				let foreign_data = IGatewayV2::AsForeignTokenERC20::abi_decode(&asset.data, true)
+					.map_err(|_| MessageDecodeError)?;
+				EthereumAsset::ForeignTokenERC20 {
+					token_id: H256::from(foreign_data.token_id.as_ref()),
+					value: foreign_data.value,
+				}
+			},
+			_ => return Err(MessageDecodeError),
+		};
+		Ok(asset)
 	}
 }
 

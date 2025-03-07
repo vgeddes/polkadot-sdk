@@ -5,7 +5,6 @@ use super::*;
 use crate::{mock::*, Error};
 use codec::Encode;
 use frame_support::{assert_noop, assert_ok};
-use hex_literal::hex;
 use snowbridge_inbound_queue_primitives::{EventProof, Proof};
 use snowbridge_test_utils::mock_xcm::{set_charge_fees_override, set_sender_override};
 use sp_keyring::sr25519::Keyring;
@@ -290,6 +289,38 @@ fn test_register_token() {
 				execution_proof: mock_execution_proof(),
 			},
 		};
+
+		assert_ok!(InboundQueue::submit(origin, Box::new(event)));
+	});
+}
+
+#[test]
+fn test_switch_operating_mode() {
+	new_tester().execute_with(|| {
+		let relayer: AccountId = Keyring::Bob.into();
+		let origin = RuntimeOrigin::signed(relayer);
+		let event = EventProof {
+			event_log: mock_event_log(),
+			proof: Proof {
+				receipt_proof: Default::default(),
+				execution_proof: mock_execution_proof(),
+			},
+		};
+
+		assert_ok!(InboundQueue::set_operating_mode(
+			RuntimeOrigin::root(),
+			snowbridge_core::BasicOperatingMode::Halted
+		));
+
+		assert_noop!(
+			InboundQueue::submit(origin.clone(), Box::new(event.clone())),
+			Error::<Test>::Halted
+		);
+
+		assert_ok!(InboundQueue::set_operating_mode(
+			RuntimeOrigin::root(),
+			snowbridge_core::BasicOperatingMode::Normal
+		));
 
 		assert_ok!(InboundQueue::submit(origin, Box::new(event)));
 	});
