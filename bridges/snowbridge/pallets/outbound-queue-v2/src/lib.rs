@@ -344,6 +344,7 @@ pub mod pallet {
 			let outbound_message = OutboundMessage {
 				origin,
 				nonce,
+				topic: id,
 				commands: commands.try_into().map_err(|_| Corrupt)?,
 			};
 			Messages::<T>::append(outbound_message);

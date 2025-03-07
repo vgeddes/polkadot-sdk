@@ -111,6 +111,8 @@ pub struct OutboundMessage {
 	pub origin: H256,
 	/// Nonce
 	pub nonce: u64,
+	/// Topic
+	pub topic: H256,
 	/// Commands
 	pub commands: BoundedVec<OutboundCommandWrapper, ConstU32<MAX_COMMANDS>>,
 }
