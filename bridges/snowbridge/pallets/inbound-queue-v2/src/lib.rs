@@ -241,11 +241,13 @@ pub mod pallet {
 			// Verify that the message was submitted from the known Gateway contract
 			ensure!(T::GatewayAddress::get() == message.gateway, Error::<T>::InvalidGateway);
 
-			// Verify the message has not been processed
-			ensure!(!Nonce::<T>::get(message.nonce.into()), Error::<T>::InvalidNonce);
+			let (nonce, relayer_fee) = (message.nonce, message.relayer_fee);
 
-			let xcm = T::MessageConverter::convert(message.clone())
-				.map_err(|error| Error::<T>::from(error))?;
+			// Verify the message has not been processed
+			ensure!(!Nonce::<T>::get(nonce.into()), Error::<T>::InvalidNonce);
+
+			let xcm =
+				T::MessageConverter::convert(message).map_err(|error| Error::<T>::from(error))?;
 
 			// Forward XCM to AH
 			let dest = Location::new(1, [Parachain(T::AssetHubParaId::get())]);
@@ -258,16 +260,16 @@ pub mod pallet {
 			// Get the tip and remove it from storage, if a tip was added.
 			let tip = Tips::<T>::take(message.nonce);
 			let total_reward = match tip {
-				Some(amount) => message.relayer_fee.saturating_add(amount),
-				None => message.relayer_fee,
+				Some(amount) => relayer_fee.saturating_add(amount),
+				None => relayer_fee,
 			};
 
 			T::RewardPayment::register_reward(&relayer, T::DefaultRewardKind::get(), total_reward);
 
 			// Mark message as received
-			Nonce::<T>::set(message.nonce.into());
+			Nonce::<T>::set(nonce.into());
 
-			Self::deposit_event(Event::MessageReceived { nonce: message.nonce, message_id });
+			Self::deposit_event(Event::MessageReceived { nonce, message_id });
 
 			Ok(())
 		}
