@@ -209,7 +209,9 @@ pub mod pallet {
 	#[pallet::storage]
 	pub type OperatingMode<T: Config> = StorageValue<_, BasicOperatingMode, ValueQuery>;
 
-	/// Keep track of tips added for a message as an additional relayer incentivization.
+	/// Keep track of tips added for a message as an additional relayer incentivization. The
+	/// key for the storage map is the nonce of the message to which the tip should be added.
+	/// The value is the tip amount, in Ether.
 	#[pallet::storage]
 	pub type Tips<T: Config> = StorageMap<_, Blake2_128Concat, u64, u128, ValueQuery>;
 
