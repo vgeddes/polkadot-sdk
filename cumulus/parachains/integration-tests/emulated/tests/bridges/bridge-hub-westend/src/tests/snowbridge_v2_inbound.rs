@@ -31,10 +31,10 @@ use emulated_integration_tests_common::{RESERVABLE_ASSET_ID, WETH};
 use hex_literal::hex;
 use rococo_westend_system_emulated_network::penpal_emulated_chain::PARA_ID_B;
 use snowbridge_core::{reward::MessageId, AssetMetadata, TokenIdOf};
-use snowbridge_inbound_queue_primitives::v2::{{
+use snowbridge_inbound_queue_primitives::v2::{
 	EthereumAsset::{ForeignTokenERC20, NativeTokenERC20},
 	Message, Network, XcmPayload,
-}, EthereumLocationsConverterFor};
+};
 use snowbridge_pallet_system_v2::LostTips;
 use sp_core::{H160, H256};
 use sp_runtime::MultiAddress;
@@ -1088,7 +1088,7 @@ pub fn tip_to_processed_nonce_is_added_to_lost_tips() {
 			nonce: 1,
 			origin,
 			assets: vec![],
-			xcm: XcmPayload::CreateAsset { token, network: 0 },
+			xcm: XcmPayload::CreateAsset { token, network: Network::Polkadot },
 			claimer: Some(claimer_bytes),
 			// Used to pay the asset creation deposit.
 			value: 9_000_000_000_000u128,

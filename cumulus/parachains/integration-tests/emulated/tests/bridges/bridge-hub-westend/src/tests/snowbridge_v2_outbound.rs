@@ -21,7 +21,6 @@ use emulated_integration_tests_common::{impls::Decode, PenpalBTeleportableAssetL
 use frame_support::{assert_err_ignore_postinfo, pallet_prelude::TypeInfo};
 use rococo_westend_system_emulated_network::penpal_emulated_chain::penpal_runtime::xcm_config::LocalTeleportableToAssetHub;
 use snowbridge_core::{reward::MessageId, AssetMetadata, BasicOperatingMode};
-use snowbridge_inbound_queue_primitives::EthereumLocationsConverterFor;
 use snowbridge_outbound_queue_primitives::v2::{ContractCall, DeliveryReceipt};
 use snowbridge_pallet_outbound_queue_v2::Error;
 use snowbridge_pallet_system_v2::LostTips;

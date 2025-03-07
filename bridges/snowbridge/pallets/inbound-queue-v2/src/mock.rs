@@ -138,11 +138,9 @@ impl MaybeEquivalence<TokenId, Location> for MockTokenIdConvert {
 }
 
 pub struct MockAccountLocationConverter<AccountId>(PhantomData<AccountId>);
-impl<'a, AccountId: Clone + Clone> TryConvert<&'a AccountId, Location>
-	for MockAccountLocationConverter<AccountId>
-{
-	fn try_convert(_who: &AccountId) -> Result<Location, &AccountId> {
-		Ok(Location::here())
+impl Convert<AccountId, Location> for MockAccountLocationConverter<AccountId> {
+	fn convert(_who: AccountId) -> Location {
+		Location::here()
 	}
 }
 
@@ -158,7 +156,7 @@ parameter_types! {
 	pub DefaultMyRewardKind: BridgeReward = BridgeReward::Snowbridge;
 	pub const CreateAssetCall: [u8;2] = [53, 0];
 	pub const CreateAssetDeposit: u128 = 10_000_000_000u128;
-    pub const SnowbridgeReward: BridgeReward = BridgeReward::Snowbridge;
+	pub const SnowbridgeReward: BridgeReward = BridgeReward::Snowbridge;
 }
 
 impl inbound_queue_v2::Config for Test {
