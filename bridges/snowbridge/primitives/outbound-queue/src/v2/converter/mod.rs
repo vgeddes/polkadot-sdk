@@ -63,7 +63,7 @@ impl<
 where
 	UniversalLocation: Get<InteriorLocation>,
 	EthereumNetwork: Get<NetworkId>,
-	OutboundQueue: SendMessage<Balance = u128>,
+	OutboundQueue: SendMessage,
 	AgentHashedDescription: ConvertLocation<H256>,
 	ConvertAssetId: MaybeEquivalence<TokenId, Location>,
 	AssetHubParaId: Get<ParaId>,
@@ -132,7 +132,7 @@ where
 		// Inspect `AliasOrigin` as V2 message. This exporter should only process Snowbridge V2
 		// messages. We use the presence of an `AliasOrigin` instruction to distinguish between
 		// Snowbridge V2 and Snowbridge V1 messages, since XCM V5 came after Snowbridge V1 and
-		// so is not supported in Snowbridge V1. Snowbridge V1 messages are processed by the
+		// so it's not supported in Snowbridge V1. Snowbridge V1 messages are processed by the
 		// snowbridge-outbound-queue-primitives v1 exporter.
 		let mut instructions = message.clone().0;
 		let result = instructions.matcher().match_next_inst_while(
@@ -153,7 +153,7 @@ where
 		})?;
 
 		// validate the message
-		let (ticket, _) = OutboundQueue::validate(&message).map_err(|err| {
+		let ticket = OutboundQueue::validate(&message).map_err(|err| {
 			log::error!(target: TARGET, "OutboundQueue validation of message failed. {err:?}");
 			SendError::Unroutable
 		})?;

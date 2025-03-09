@@ -53,23 +53,19 @@ pub enum RewardPaymentError {
 impl From<RewardPaymentError> for DispatchError {
 	fn from(e: RewardPaymentError) -> DispatchError {
 		match e {
-			RewardPaymentError::XcmSendFailure => DispatchError::Other("xcm send failure"),
-			RewardPaymentError::ChargeFeesFailure => DispatchError::Other("charge fees error"),
+			XcmSendFailure => DispatchError::Other("xcm send failure"),
+			ChargeFeesFailure => DispatchError::Other("charge fees error"),
 		}
 	}
 }
-
-pub struct NoOpReward;
 
 /// Reward payment procedure that sends a XCM to AssetHub to mint the reward (foreign asset)
 /// into the provided beneficiary account.
 pub struct PayAccountOnLocation<
 	Relayer,
 	RewardBalance,
-	NoOpReward,
 	EthereumNetwork,
 	AssetHubLocation,
-	AssetHubXCMFee,
 	InboundQueueLocation,
 	XcmSender,
 	XcmExecutor,
@@ -78,10 +74,8 @@ pub struct PayAccountOnLocation<
 	PhantomData<(
 		Relayer,
 		RewardBalance,
-		NoOpReward,
 		EthereumNetwork,
 		AssetHubLocation,
-		AssetHubXCMFee,
 		InboundQueueLocation,
 		XcmSender,
 		XcmExecutor,
@@ -92,22 +86,18 @@ pub struct PayAccountOnLocation<
 impl<
 		Relayer,
 		RewardBalance,
-		NoOpReward,
 		EthereumNetwork,
 		AssetHubLocation,
-		AssetHubXCMFee,
 		InboundQueueLocation,
 		XcmSender,
 		XcmExecutor,
 		Call,
-	> PaymentProcedure<Relayer, NoOpReward, RewardBalance>
+	> PaymentProcedure<Relayer, (), RewardBalance>
 	for PayAccountOnLocation<
 		Relayer,
 		RewardBalance,
-		NoOpReward,
 		EthereumNetwork,
 		AssetHubLocation,
-		AssetHubXCMFee,
 		InboundQueueLocation,
 		XcmSender,
 		XcmExecutor,
@@ -125,7 +115,6 @@ where
 	EthereumNetwork: Get<NetworkId>,
 	InboundQueueLocation: Get<InteriorLocation>,
 	AssetHubLocation: Get<Location>,
-	AssetHubXCMFee: Get<u128>,
 	XcmSender: SendXcm,
 	RewardBalance: Into<u128> + Clone,
 	XcmExecutor: ExecuteXcm<Call>,
@@ -136,29 +125,25 @@ where
 
 	fn pay_reward(
 		relayer: &Relayer,
-		_reward_kind: NoOpReward,
+		_: (),
 		reward: RewardBalance,
 		beneficiary: Self::Beneficiary,
 	) -> Result<(), Self::Error> {
 		let ethereum_location = Location::new(2, [GlobalConsensus(EthereumNetwork::get())]);
-
-		let total_amount: u128 = AssetHubXCMFee::get().saturating_add(reward.clone().into());
-		let total_assets: Asset = (ethereum_location.clone(), total_amount).into();
-		let fee_asset: Asset = (ethereum_location, AssetHubXCMFee::get()).into();
+		let assets: Asset = (ethereum_location.clone(), reward.into()).into();
 
 		let xcm: Xcm<()> = alloc::vec![
+			UnpaidExecution { weight_limit: Unlimited, check_origin: None },
 			DescendOrigin(InboundQueueLocation::get().into()),
 			UniversalOrigin(GlobalConsensus(EthereumNetwork::get())),
-			ReserveAssetDeposited(total_assets.into()),
-			PayFees { asset: fee_asset },
-			RefundSurplus,
+			ReserveAssetDeposited(assets.into()),
 			DepositAsset { assets: AllCounted(1).into(), beneficiary },
 		]
 		.into();
 
 		let (ticket, fee) =
 			validate_send::<XcmSender>(AssetHubLocation::get(), xcm).map_err(|_| XcmSendFailure)?;
-		XcmExecutor::charge_fees(relayer.clone(), fee.clone()).map_err(|_| ChargeFeesFailure)?;
+		XcmExecutor::charge_fees(relayer.clone(), fee).map_err(|_| ChargeFeesFailure)?;
 		XcmSender::deliver(ticket).map_err(|_| XcmSendFailure)?;
 
 		Ok(())
@@ -194,7 +179,6 @@ mod tests {
 	parameter_types! {
 		pub AssetHubLocation: Location = Location::new(1,[Parachain(1000)]);
 		pub InboundQueueLocation: InteriorLocation = [PalletInstance(84)].into();
-		pub AssetHubXCMFee: u128 = 1_000_000_000u128;
 		pub EthereumNetwork: NetworkId = NetworkId::Ethereum { chain_id: 11155111 };
 		pub const DefaultMyRewardKind: BridgeReward = BridgeReward::Snowbridge;
 	}
@@ -266,18 +250,15 @@ mod tests {
 		type TestedPayAccountOnLocation = PayAccountOnLocation<
 			MockRelayer,
 			u128,
-			NoOpReward,
 			EthereumNetwork,
 			AssetHubLocation,
-			AssetHubXCMFee,
 			InboundQueueLocation,
 			MockXcmSender,
 			MockXcmExecutor,
 			MockCall,
 		>;
 
-		let result =
-			TestedPayAccountOnLocation::pay_reward(&relayer, NoOpReward, reward, beneficiary);
+		let result = TestedPayAccountOnLocation::pay_reward(&relayer, (), reward, beneficiary);
 
 		assert!(result.is_ok());
 	}
@@ -304,10 +285,8 @@ mod tests {
 		type FailingSenderPayAccount = PayAccountOnLocation<
 			MockRelayer,
 			u128,
-			NoOpReward,
 			EthereumNetwork,
 			AssetHubLocation,
-			AssetHubXCMFee,
 			InboundQueueLocation,
 			FailingXcmValidator,
 			MockXcmExecutor,
@@ -317,7 +296,7 @@ mod tests {
 		let relayer = MockRelayer(AccountId32::new([1u8; 32]));
 		let reward = 1_000u128;
 		let beneficiary = Location::new(1, Here);
-		let result = FailingSenderPayAccount::pay_reward(&relayer, NoOpReward, reward, beneficiary);
+		let result = FailingSenderPayAccount::pay_reward(&relayer, (), reward, beneficiary);
 
 		assert!(result.is_err());
 		let err_str = format!("{:?}", result.err().unwrap());
@@ -352,10 +331,8 @@ mod tests {
 		type FailingExecutorPayAccount = PayAccountOnLocation<
 			MockRelayer,
 			u128,
-			NoOpReward,
 			EthereumNetwork,
 			AssetHubLocation,
-			AssetHubXCMFee,
 			InboundQueueLocation,
 			MockXcmSender,
 			FailingXcmExecutor,
@@ -365,8 +342,7 @@ mod tests {
 		let relayer = MockRelayer(AccountId32::new([3u8; 32]));
 		let beneficiary = Location::new(1, Here);
 		let reward = 500u128;
-		let result =
-			FailingExecutorPayAccount::pay_reward(&relayer, NoOpReward, reward, beneficiary);
+		let result = FailingExecutorPayAccount::pay_reward(&relayer, (), reward, beneficiary);
 
 		assert!(result.is_err());
 		let err_str = format!("{:?}", result.err().unwrap());
@@ -399,10 +375,8 @@ mod tests {
 		type FailingDeliveryPayAccount = PayAccountOnLocation<
 			MockRelayer,
 			u128,
-			NoOpReward,
 			EthereumNetwork,
 			AssetHubLocation,
-			AssetHubXCMFee,
 			InboundQueueLocation,
 			FailingDeliveryXcmSender,
 			MockXcmExecutor,
@@ -412,8 +386,7 @@ mod tests {
 		let relayer = MockRelayer(AccountId32::new([4u8; 32]));
 		let beneficiary = Location::new(1, Here);
 		let reward = 123u128;
-		let result =
-			FailingDeliveryPayAccount::pay_reward(&relayer, NoOpReward, reward, beneficiary);
+		let result = FailingDeliveryPayAccount::pay_reward(&relayer, (), reward, beneficiary);
 
 		assert!(result.is_err());
 		let err_str = format!("{:?}", result.err().unwrap());

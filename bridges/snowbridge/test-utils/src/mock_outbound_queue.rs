@@ -13,12 +13,10 @@ pub struct MockOkOutboundQueue;
 impl SendMessage for MockOkOutboundQueue {
 	type Ticket = ();
 
-	type Balance = u128;
-
 	fn validate(
 		_: &Message,
-	) -> Result<(Self::Ticket, Self::Balance), snowbridge_outbound_queue_primitives::SendError> {
-		Ok(((), 0))
+	) -> Result<Self::Ticket, snowbridge_outbound_queue_primitives::SendError> {
+		Ok(())
 	}
 
 	fn deliver(_: Self::Ticket) -> Result<H256, snowbridge_outbound_queue_primitives::SendError> {

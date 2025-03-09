@@ -32,7 +32,6 @@ use bp_relayers::RewardsAccountParams;
 use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use frame_support::parameter_types;
 use scale_info::TypeInfo;
-use snowbridge_core::reward::NoOpReward;
 use testnet_parachains_constants::westend::snowbridge::EthereumNetwork;
 use xcm::{opaque::latest::Location, VersionedLocation};
 use xcm_executor::XcmExecutor;
@@ -41,9 +40,6 @@ parameter_types! {
 	pub storage RequiredStakeForStakeAndSlash: Balance = 1_000_000;
 	pub const RelayerStakeLease: u32 = 8;
 	pub const RelayerStakeReserveId: [u8; 8] = *b"brdgrlrs";
-	/// The execution fee for executing the relayer reward on AssetHub, once the relauer claims
-	/// the reward. This cost is in Ether. TODO update value
-	pub AssetHubXCMFee: u128 = 1_000_000_000_000u128;
 }
 
 /// Showcasing that we can handle multiple different rewards with the same pallet.
@@ -124,16 +120,14 @@ impl bp_relayers::PaymentProcedure<AccountId, BridgeReward, u128> for BridgeRewa
 						snowbridge_core::reward::PayAccountOnLocation::<
 							AccountId,
 							u128,
-							NoOpReward,
 							EthereumNetwork,
 							AssetHubLocation,
-							AssetHubXCMFee,
 							InboundQueueLocation,
 							XcmRouter,
 							XcmExecutor<XcmConfig>,
 							RuntimeCall
 						>::pay_reward(
-							relayer, NoOpReward, reward, Location::try_from(account_location).unwrap()
+							relayer, (), reward, Location::try_from(account_location).unwrap()
 						)
 					}
 				}

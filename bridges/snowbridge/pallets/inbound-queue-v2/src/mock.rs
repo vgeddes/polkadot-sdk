@@ -3,11 +3,8 @@
 use super::*;
 
 use crate::{self as inbound_queue_v2};
-use frame_support::{
-	derive_impl, parameter_types,
-	traits::ConstU32,
-	weights::{constants::RocksDbWeight, IdentityFee},
-};
+use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
+use frame_support::{derive_impl, parameter_types, traits::ConstU32, weights::{constants::RocksDbWeight, IdentityFee}};
 use hex_literal::hex;
 use snowbridge_beacon_primitives::{
 	types::deneb, BeaconHeader, ExecutionProof, Fork, ForkVersions, VersionedExecutionPayloadHeader,
@@ -261,16 +258,6 @@ pub fn mock_execution_proof() -> ExecutionProof {
 			excess_blob_gas: 0,
 		}),
 		execution_branch: vec![],
-	}
-}
-
-// For backwards compatibility and tests
-impl WeightInfo for () {
-	fn submit() -> Weight {
-		Weight::from_parts(70_000_000, 0)
-			.saturating_add(Weight::from_parts(0, 3601))
-			.saturating_add(RocksDbWeight::get().reads(2))
-			.saturating_add(RocksDbWeight::get().writes(2))
 	}
 }
 
