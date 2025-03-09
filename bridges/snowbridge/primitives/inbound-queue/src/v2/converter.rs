@@ -244,7 +244,6 @@ where
 		claimer_account: [u8; 32],
 	) -> Xcm<()> {
 		vec![
-			RefundSurplus,
 			// Exchange eth for dot to pay the asset creation deposit.
 			ExchangeAsset {
 				give: eth_asset.into(),
@@ -270,6 +269,7 @@ where
 					.encode()
 					.into(),
 			},
+			RefundSurplus,
 			// Deposit leftover funds to Snowbridge sovereign
 			DepositAsset { assets: Wild(AllCounted(2)), beneficiary: claimer_account.into() },
 		]
