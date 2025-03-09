@@ -110,7 +110,7 @@ where
 		let assets: Asset = (ethereum_location.clone(), reward.into()).into();
 
 		let xcm: Xcm<()> = alloc::vec![
-			UnpaidExecution{ weight_limit: Unlimited, check_origin: None},
+			UnpaidExecution { weight_limit: Unlimited, check_origin: None },
 			DescendOrigin(InboundQueueLocation::get().into()),
 			UniversalOrigin(GlobalConsensus(EthereumNetwork::get())),
 			ReserveAssetDeposited(assets.into()),
@@ -237,8 +237,7 @@ mod tests {
 			MockCall,
 		>;
 
-		let result =
-			TestedPayAccountOnLocation::pay_reward(&relayer, (), reward, beneficiary);
+		let result = TestedPayAccountOnLocation::pay_reward(&relayer, (), reward, beneficiary);
 
 		assert!(result.is_ok());
 	}
@@ -324,8 +323,7 @@ mod tests {
 		let relayer = MockRelayer(AccountId32::new([3u8; 32]));
 		let beneficiary = Location::new(1, Here);
 		let reward = 500u128;
-		let result =
-			FailingExecutorPayAccount::pay_reward(&relayer, (), reward, beneficiary);
+		let result = FailingExecutorPayAccount::pay_reward(&relayer, (), reward, beneficiary);
 
 		assert!(result.is_err());
 		let err_str = format!("{:?}", result.err().unwrap());
@@ -370,8 +368,7 @@ mod tests {
 		let relayer = MockRelayer(AccountId32::new([4u8; 32]));
 		let beneficiary = Location::new(1, Here);
 		let reward = 123u128;
-		let result =
-			FailingDeliveryPayAccount::pay_reward(&relayer, (), reward, beneficiary);
+		let result = FailingDeliveryPayAccount::pay_reward(&relayer, (), reward, beneficiary);
 
 		assert!(result.is_err());
 		let err_str = format!("{:?}", result.err().unwrap());
