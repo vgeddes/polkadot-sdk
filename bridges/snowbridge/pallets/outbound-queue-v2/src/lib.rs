@@ -76,7 +76,10 @@ use frame_support::{
 	traits::{tokens::Balance, EnqueueMessage, Get, ProcessMessageError},
 	weights::{Weight, WeightToFee},
 };
-use snowbridge_core::{BasicOperatingMode, TokenId};
+use snowbridge_core::{
+	reward::{AddTip, AddTipError},
+	BasicOperatingMode, TokenId,
+};
 use snowbridge_merkle_tree::merkle_root;
 use snowbridge_outbound_queue_primitives::{
 	v2::{
@@ -94,6 +97,8 @@ use sp_std::prelude::*;
 pub use types::{PendingOrder, ProcessMessageOriginOf};
 pub use weights::WeightInfo;
 use xcm::latest::{Location, NetworkId};
+
+pub type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
 type DeliveryReceiptOf<T> = DeliveryReceipt<<T as frame_system::Config>::AccountId>;
 
 pub use pallet::*;
@@ -400,6 +405,20 @@ pub mod pallet {
 			T::WeightToFee::weight_to_fee(
 				&T::WeightInfo::do_process_message().saturating_add(T::WeightInfo::commit_single()),
 			)
+		}
+	}
+
+	impl<T: Config> AddTip for Pallet<T> {
+		fn add_tip(nonce: u64, amount: u128) -> Result<(), AddTipError> {
+			PendingOrders::<T>::try_mutate_exists(nonce, |maybe_order| -> Result<(), AddTipError> {
+				match maybe_order {
+					Some(order) => {
+						order.fee = order.fee.saturating_add(amount);
+						Ok(())
+					},
+					None => Err(AddTipError::UnknownMessage),
+				}
+			})
 		}
 	}
 }

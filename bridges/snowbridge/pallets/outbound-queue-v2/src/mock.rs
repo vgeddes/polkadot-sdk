@@ -9,15 +9,15 @@ use frame_support::{
 	BoundedVec,
 };
 
-use codec::{DecodeWithMemTracking, Encode, MaxEncodedLen};
+use bp_relayers::RewardsAccountParams;
 use hex_literal::hex;
-use scale_info::TypeInfo;
 use snowbridge_core::{
 	gwei, meth,
 	pricing::{PricingParameters, Rewards},
 	AgentId, AgentIdOf, ParaId,
 };
 use snowbridge_outbound_queue_primitives::{v2::*, Log, Proof, VerificationError, Verifier};
+use snowbridge_test_utils::mock_rewards::{BridgeReward, MockPaymentProcedure};
 use sp_core::{ConstU32, H160, H256};
 use sp_runtime::{
 	traits::{BlakeTwo256, IdentityLookup, Keccak256},
@@ -30,12 +30,16 @@ use xcm_executor::traits::ConvertLocation;
 type Block = frame_system::mocking::MockBlock<Test>;
 type AccountId = AccountId32;
 
+type Balance = u128;
+
 frame_support::construct_runtime!(
 	pub enum Test
 	{
 		System: frame_system::{Pallet, Call, Storage, Event<T>},
+		Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
 		MessageQueue: pallet_message_queue::{Pallet, Call, Storage, Event<T>},
 		OutboundQueue: crate::{Pallet, Storage, Event<T>},
+		BridgeRelayers: pallet_bridge_relayers,
 	}
 );
 
@@ -53,6 +57,18 @@ impl frame_system::Config for Test {
 	type PalletInfo = PalletInfo;
 	type Nonce = u64;
 	type Block = Block;
+	type AccountData = pallet_balances::AccountData<Balance>;
+}
+
+parameter_types! {
+	pub const ExistentialDeposit: u128 = 1;
+}
+
+#[derive_impl(pallet_balances::config_preludes::TestDefaultConfig)]
+impl pallet_balances::Config for Test {
+	type Balance = Balance;
+	type ExistentialDeposit = ExistentialDeposit;
+	type AccountStore = System;
 }
 
 parameter_types! {
@@ -72,6 +88,16 @@ impl pallet_message_queue::Config for Test {
 	type ServiceWeight = ServiceWeight;
 	type IdleMaxServiceWeight = ();
 	type QueuePausedQuery = ();
+}
+
+impl pallet_bridge_relayers::Config for Test {
+	type RuntimeEvent = RuntimeEvent;
+	type RewardBalance = u128;
+	type Reward = RewardsAccountParams<u64>;
+	type PaymentProcedure = MockPaymentProcedure;
+	type StakeAndSlash = ();
+	type Balance = Balance;
+	type WeightInfo = ();
 }
 
 // Mock verifier
@@ -96,37 +122,10 @@ parameter_types! {
 	};
 	pub const GatewayAddress: H160 = H160(GATEWAY_ADDRESS);
 	pub EthereumNetwork: NetworkId = NetworkId::Ethereum { chain_id: 11155111 };
-	pub DefaultMyRewardKind: BridgeReward = BridgeReward::Snowbridge;
+	pub const SnowbridgeReward: BridgeReward = BridgeReward::Snowbridge;
 }
 
 pub const DOT: u128 = 10_000_000_000;
-
-/// Showcasing that we can handle multiple different rewards with the same pallet.
-#[derive(
-	Clone,
-	Copy,
-	Debug,
-	Decode,
-	DecodeWithMemTracking,
-	Encode,
-	Eq,
-	MaxEncodedLen,
-	PartialEq,
-	TypeInfo,
-)]
-pub enum BridgeReward {
-	/// Rewards for Snowbridge.
-	Snowbridge,
-}
-
-impl RewardLedger<<mock::Test as frame_system::Config>::AccountId, BridgeReward, u128> for () {
-	fn register_reward(
-		_relayer: &<mock::Test as frame_system::Config>::AccountId,
-		_reward: BridgeReward,
-		_reward_balance: u128,
-	) {
-	}
-}
 
 impl crate::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
@@ -140,11 +139,11 @@ impl crate::Config for Test {
 	type Balance = u128;
 	type WeightToFee = IdentityFee<u128>;
 	type WeightInfo = ();
-	type RewardPayment = ();
 	type ConvertAssetId = ();
 	type EthereumNetwork = EthereumNetwork;
 	type RewardKind = BridgeReward;
-	type DefaultRewardKind = DefaultMyRewardKind;
+	type DefaultRewardKind = SnowbridgeReward;
+	type RewardPayment = BridgeRelayers;
 }
 
 fn setup() {

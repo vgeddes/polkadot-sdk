@@ -53,6 +53,7 @@ hex-literal = { workspace = true, default-features = true }
 snowbridge-pallet-ethereum-client = { workspace = true, default-features = true }
 snowbridge-test-utils = { workspace = true }
 sp-keyring = { workspace = true, default-features = true }
+pallet-bridge-relayers = { workspace = true, default-features = true }
 
 [features]
 default = ["std"]
@@ -65,6 +66,7 @@ std = [
 	"frame-system/std",
 	"log/std",
 	"pallet-balances/std",
+	"pallet-bridge-relayers/std",
 	"scale-info/std",
 	"serde",
 	"snowbridge-beacon-primitives/std",

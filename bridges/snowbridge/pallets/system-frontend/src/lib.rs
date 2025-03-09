@@ -26,9 +26,12 @@ pub use backend_weights::*;
 
 use frame_support::{pallet_prelude::*, traits::EnsureOriginWithArg};
 use frame_system::pallet_prelude::*;
+use pallet_asset_conversion::Swap;
 use snowbridge_core::{
-	operating_mode::ExportPausedQuery, AssetMetadata, BasicOperatingMode as OperatingMode,
+	burn_for_teleport, operating_mode::ExportPausedQuery, reward::MessageId, AssetMetadata,
+	BasicOperatingMode as OperatingMode,
 };
+use sp_runtime::traits::TryConvert;
 use sp_std::prelude::*;
 use xcm::{
 	latest::{validate_send, XcmHash},
@@ -36,32 +39,34 @@ use xcm::{
 };
 use xcm_executor::traits::{FeeManager, FeeReason, TransactAsset};
 
-#[cfg(feature = "runtime-benchmarks")]
-use frame_support::traits::OriginTrait;
-
 pub use pallet::*;
+pub type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
 
 pub const LOG_TARGET: &str = "snowbridge-system-frontend";
 
 /// Call indices within BridgeHub runtime for dispatchables within `snowbridge-pallet-system-v2`
 #[allow(clippy::large_enum_variant)]
 #[derive(Encode, Decode, Debug, PartialEq, Clone, TypeInfo)]
-pub enum BridgeHubRuntime {
+pub enum BridgeHubRuntime<T: frame_system::Config> {
 	#[codec(index = 90)]
-	EthereumSystem(EthereumSystemCall),
+	EthereumSystem(EthereumSystemCall<T>),
 }
 
 /// Call indices for dispatchables within `snowbridge-pallet-system-v2`
 #[derive(Encode, Decode, Debug, PartialEq, Clone, TypeInfo)]
-pub enum EthereumSystemCall {
+pub enum EthereumSystemCall<T: frame_system::Config> {
 	#[codec(index = 0)]
 	RegisterToken {
 		sender: Box<VersionedLocation>,
 		asset_id: Box<VersionedLocation>,
 		metadata: AssetMetadata,
 	},
+	#[codec(index = 5)]
+	AddTip { sender: AccountIdOf<T>, message_id: MessageId, amount: u128 },
 }
 
+#[cfg(feature = "runtime-benchmarks")]
+use frame_support::traits::OriginTrait;
 #[cfg(feature = "runtime-benchmarks")]
 pub trait BenchmarkHelper<O>
 where
@@ -92,12 +97,12 @@ pub mod pallet {
 
 		/// To withdraw and deposit an asset.
 		type AssetTransactor: TransactAsset;
-
 		/// To charge XCM delivery fees
 		type XcmExecutor: ExecuteXcm<Self::RuntimeCall> + FeeManager;
-
 		/// Fee asset for the execution cost on ethereum
 		type EthereumLocation: Get<Location>;
+		/// To swap the provided tip asset for
+		type Swap: Swap<Self::AccountId, AssetKind = Location, Balance = u128>;
 
 		/// Location of bridge hub
 		type BridgeHubLocation: Get<Location>;
@@ -113,6 +118,7 @@ pub mod pallet {
 
 		/// Weights for pallet dispatchables
 		type WeightInfo: WeightInfo;
+		type AccountToLocation: for<'a> TryConvert<&'a Self::AccountId, Location>;
 
 		/// A set of helper functions for benchmarking.
 		#[cfg(feature = "runtime-benchmarks")]
@@ -150,6 +156,16 @@ pub mod pallet {
 		/// The desired destination was unreachable, generally because there is a no way of routing
 		/// to it.
 		Unreachable,
+		/// The asset provided for the tip is unsupported.
+		UnsupportedAsset,
+		/// Unable to withdraw asset.
+		WithdrawError,
+		/// Account could not be converted to a location.
+		InvalidAccount,
+		/// Provided tip asset could not be swapped for ether.
+		SwapError,
+		/// Ether could not be burned.
+		BurnError,
 	}
 
 	impl<T: Config> From<SendError> for Error<T> {
@@ -207,7 +223,7 @@ pub mod pallet {
 				Self::build_register_token_call(&origin_location, &asset_location, metadata)?;
 			let remote_xcm = Self::build_remote_xcm(&call);
 			let message_id =
-				Self::send_xcm(origin_location.clone(), dest.clone(), remote_xcm.clone())
+				Self::send_xcm(origin_location, dest.clone(), remote_xcm.clone())
 					.map_err(|error| Error::<T>::from(error))?;
 
 			Self::deposit_event(Event::<T>::MessageSent {
@@ -219,10 +235,68 @@ pub mod pallet {
 
 			Ok(())
 		}
+
+		/// Add an additional relayer tip for a committed message identified by `message_id`.
+		/// The tip asset will be swapped for ether.
+		#[pallet::call_index(2)]
+		#[pallet::weight(
+			T::WeightInfo::add_tip()
+				.saturating_add(T::BackendWeightInfo::transact_add_tip())
+		)]
+		pub fn add_tip(
+			origin: OriginFor<T>,
+			message_id: MessageId,
+			asset: Asset,
+		) -> DispatchResult {
+			let who = ensure_signed(origin)?;
+
+			let ether_location = T::EthereumLocation::get();
+			let (tip_asset_location, tip_amount) = match asset {
+				Asset { id: AssetId(ref loc), fun: Fungibility::Fungible(amount) } => (loc, amount),
+				_ => return Err(Error::<T>::UnsupportedAsset.into()),
+			};
+
+			let ether_gained = if *tip_asset_location != ether_location {
+				Self::swap_and_burn(
+					who.clone(),
+					tip_asset_location.clone(),
+					ether_location,
+					tip_amount,
+				)
+				.map_err(|_| Error::<T>::SwapError)?
+			} else {
+				tip_amount
+			};
+
+			// Send the tip details to BH to be allocated to the reward in the Inbound/Outbound
+			// pallet
+			let dest = T::BridgeHubLocation::get();
+			let call = Self::build_add_tip_call(who.clone(), message_id.clone(), ether_gained);
+			let remote_xcm = Self::build_remote_xcm(&call);
+			let who_location =
+				T::AccountToLocation::try_convert(&who).map_err(|_| Error::<T>::InvalidAccount)?;
+
+			let xcm_message_id =
+				Self::send_xcm(who_location, dest.clone(), remote_xcm.clone())
+					.map_err(|error| Error::<T>::from(error))?;
+
+			Self::deposit_event(Event::<T>::MessageSent {
+				origin: T::PalletLocation::get().into(),
+				destination: dest,
+				message: remote_xcm,
+				message_id: xcm_message_id,
+			});
+
+			Ok(())
+		}
 	}
 
 	impl<T: Config> Pallet<T> {
-		fn send_xcm(origin: Location, dest: Location, xcm: Xcm<()>) -> Result<XcmHash, SendError> {
+		fn send_xcm(
+			origin: Location,
+			dest: Location,
+			xcm: Xcm<()>,
+		) -> Result<XcmHash, SendError> {
 			let is_waived =
 				<T::XcmExecutor as FeeManager>::is_waived(Some(&origin), FeeReason::ChargeFees);
 			let (ticket, price) = validate_send::<T::XcmSender>(dest, xcm.clone())?;
@@ -232,12 +306,48 @@ pub mod pallet {
 			T::XcmSender::deliver(ticket)
 		}
 
+		/// Swaps a specified tip asset to Ether and then burns the resulting ether for
+		/// teleportation. Returns the amount of Ether gained if successful, or a DispatchError if
+		/// any step fails.
+		fn swap_and_burn(
+			who: AccountIdOf<T>,
+			tip_asset_location: Location,
+			ether_location: Location,
+			tip_amount: u128,
+		) -> Result<u128, DispatchError> {
+			// Swap tip asset to ether
+			let swap_path = vec![tip_asset_location.clone(), ether_location.clone()];
+			let who_location =
+				T::AccountToLocation::try_convert(&who).map_err(|_| Error::<T>::InvalidAccount)?;
+
+			let ether_gained = T::Swap::swap_exact_tokens_for_tokens(
+				who.clone(),
+				swap_path,
+				tip_amount,
+				None,
+				who.clone(),
+				true,
+			)
+			.map_err(|e| {
+				tracing::error!(target: LOG_TARGET, ?e, "swap error");
+				Error::<T>::SwapError
+			})?;
+
+			// Burn the ether
+			let ether_asset = Asset::from((ether_location.clone(), ether_gained));
+
+			burn_for_teleport::<T::AssetTransactor>(&who_location, &ether_asset)
+				.map_err(|_| Error::<T>::BurnError)?;
+
+			Ok(ether_gained)
+		}
+
 		// Build the call to dispatch the `EthereumSystem::register_token` extrinsic on BH
 		fn build_register_token_call(
 			sender: &Location,
 			asset: &Location,
 			metadata: AssetMetadata,
-		) -> Result<BridgeHubRuntime, Error<T>> {
+		) -> Result<BridgeHubRuntime<T>, Error<T>> {
 			// reanchor locations relative to BH
 			let sender = Self::reanchored(&sender)?;
 			let asset = Self::reanchored(&asset)?;
@@ -249,6 +359,19 @@ pub mod pallet {
 			});
 
 			Ok(call)
+		}
+
+		// Build the call to dispatch the `EthereumSystem::add_tip` extrinsic on BH
+		fn build_add_tip_call(
+			sender: AccountIdOf<T>,
+			message_id: MessageId,
+			amount: u128,
+		) -> BridgeHubRuntime<T> {
+			BridgeHubRuntime::EthereumSystem(EthereumSystemCall::AddTip {
+				sender,
+				message_id,
+				amount,
+			})
 		}
 
 		fn build_remote_xcm(call: &impl Encode) -> Xcm<()> {

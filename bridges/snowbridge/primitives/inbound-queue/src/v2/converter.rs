@@ -176,7 +176,7 @@ where
 	}
 
 	/// Construct the remote XCM needed to create a new asset in the `ForeignAssets` pallet
-	/// on AssetHub (Polkadot or Kusama).
+	/// on AssetHub (just supports Polkadot at the moment).
 	fn make_create_asset_xcm(
 		token: &H160,
 		network: super::message::Network,

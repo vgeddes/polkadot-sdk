@@ -18,7 +18,7 @@ use crate::{
 	bridge_common_config::BridgeReward,
 	xcm_config,
 	xcm_config::{RelayNetwork, RootLocation, TreasuryAccount, UniversalLocation, XcmConfig},
-	Balances, BridgeRelayers, EthereumInboundQueue, EthereumOutboundQueue, EthereumOutboundQueueV2,
+	Balances, BridgeRelayers, EthereumInboundQueue, EthereumInboundQueueV2, EthereumOutboundQueue, EthereumOutboundQueueV2,
 	EthereumSystem, EthereumSystemV2, MessageQueue, Runtime, RuntimeEvent, TransactionByteFee,
 };
 use frame_support::{parameter_types, traits::Contains, weights::ConstantMultiplier};
@@ -149,8 +149,7 @@ impl snowbridge_pallet_inbound_queue_v2::Config for Runtime {
 		EthereumUniversalLocation,
 		AssetHubFromEthereum,
 	>;
-	type AccountToLocation = xcm_builder::AliasesIntoAccountId32<
-		xcm_config::RelayNetwork,
+	type AccountToLocation = snowbridge_core::location::AccountToLocation<
 		<Runtime as frame_system::Config>::AccountId,
 	>;
 	type RewardKind = BridgeReward;
@@ -290,6 +289,7 @@ impl Contains<Location> for AllowFromEthereumFrontend {
 impl snowbridge_pallet_system_v2::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type OutboundQueue = EthereumOutboundQueueV2;
+	type InboundQueue = EthereumInboundQueueV2;
 	type FrontendOrigin = EnsureXcm<AllowFromEthereumFrontend>;
 	type WeightInfo = crate::weights::snowbridge_pallet_system_v2::WeightInfo<Runtime>;
 	type GovernanceOrigin = EnsureRootWithSuccess<crate::AccountId, RootLocation>;

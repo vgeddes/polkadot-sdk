@@ -1,21 +1,24 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2023 Snowfork <hello@snowfork.com>
 use crate as snowbridge_system_frontend;
+#[cfg(feature = "runtime-benchmarks")]
 use crate::BenchmarkHelper;
 use frame_support::{
 	derive_impl, parameter_types,
 	traits::{AsEnsureOriginWithArg, Everything},
 };
+use snowbridge_test_utils::mock_swap_executor::SwapExecutor;
 pub use snowbridge_test_utils::{mock_origin::pallet_xcm_origin, mock_xcm::*};
 use sp_core::H256;
 use sp_runtime::{
-	traits::{BlakeTwo256, IdentityLookup},
+	traits::{BlakeTwo256, IdentityLookup, TryConvert},
 	AccountId32, BuildStorage,
 };
+use std::marker::PhantomData;
 use xcm::prelude::*;
 
 type Block = frame_system::mocking::MockBlock<Test>;
-type AccountId = AccountId32;
+pub type AccountId = AccountId32;
 
 // Configure a mock runtime to test the pallet.
 frame_support::construct_runtime!(
@@ -46,6 +49,15 @@ impl frame_system::Config for Test {
 
 impl pallet_xcm_origin::Config for Test {
 	type RuntimeOrigin = RuntimeOrigin;
+}
+
+pub struct MockAccountLocationConverter<AccountId>(PhantomData<AccountId>);
+impl<'a, AccountId: Clone + Clone> TryConvert<&'a AccountId, Location>
+	for MockAccountLocationConverter<AccountId>
+{
+	fn try_convert(_who: &AccountId) -> Result<Location, &AccountId> {
+		Ok(Location::here())
+	}
 }
 
 #[cfg(feature = "runtime-benchmarks")]
@@ -80,7 +92,9 @@ impl crate::Config for Test {
 	type UniversalLocation = UniversalLocation;
 	type PalletLocation = PalletLocation;
 	type BackendWeightInfo = ();
+	type Swap = SwapExecutor;
 	type WeightInfo = ();
+	type AccountToLocation = MockAccountLocationConverter<AccountId>;
 	#[cfg(feature = "runtime-benchmarks")]
 	type Helper = ();
 }

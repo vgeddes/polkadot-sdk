@@ -17,7 +17,7 @@
 use crate::{
 	xcm_config,
 	xcm_config::{AssetTransactors, XcmConfig},
-	Runtime, RuntimeEvent,
+	AssetConversion, Runtime, RuntimeEvent,
 };
 use assets_common::matching::FromSiblingParachain;
 use frame_support::{parameter_types, traits::Everything};
@@ -35,6 +35,7 @@ use frame_support::traits::{
 	ContainsPair, EitherOf, EnsureOrigin, EnsureOriginWithArg, OriginTrait,
 };
 use frame_system::EnsureRootWithSuccess;
+use crate::xcm_config::RelayNetwork;
 
 #[cfg(feature = "runtime-benchmarks")]
 pub mod benchmark_helpers {
@@ -103,6 +104,11 @@ impl snowbridge_pallet_system_frontend::Config for Runtime {
 	type BridgeHubLocation = BridgeHubLocation;
 	type UniversalLocation = UniversalLocation;
 	type PalletLocation = SystemFrontendPalletLocation;
+	type Swap = AssetConversion;
+	type AccountToLocation = xcm_builder::AliasesIntoAccountId32<
+		RelayNetwork,
+		<Runtime as frame_system::Config>::AccountId,
+	>;
 	type BackendWeightInfo = ();
 }
 

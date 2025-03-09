@@ -36,6 +36,7 @@ mod mock;
 mod test;
 
 pub use crate::weights::WeightInfo;
+use bp_relayers::RewardLedger;
 use frame_support::{
 	traits::{
 		fungible::{Inspect, Mutate},
@@ -45,6 +46,7 @@ use frame_support::{
 };
 use frame_system::ensure_signed;
 use snowbridge_core::{
+	reward::{AddTip, AddTipError},
 	sparse_bitmap::{SparseBitmap, SparseBitmapImpl},
 	BasicOperatingMode,
 };
@@ -53,11 +55,9 @@ use snowbridge_inbound_queue_primitives::{
 	EventProof, VerificationError, Verifier,
 };
 use sp_core::H160;
-use sp_runtime::traits::TryConvert;
+use sp_runtime::traits::Convert;
 use sp_std::prelude::*;
 use xcm::prelude::{ExecuteXcm, Junction::*, Location, SendXcm, *};
-
-use bp_relayers::RewardLedger;
 #[cfg(feature = "runtime-benchmarks")]
 use {snowbridge_beacon_primitives::BeaconHeader, sp_core::H256};
 
@@ -120,7 +120,7 @@ pub mod pallet {
 		type WeightToFee: WeightToFee<Balance = BalanceOf<Self>>;
 		type Token: Mutate<Self::AccountId> + Inspect<Self::AccountId>;
 		/// AccountId to Location converter
-		type AccountToLocation: for<'a> TryConvert<&'a Self::AccountId, Location>;
+		type AccountToLocation: Convert<Self::AccountId, Location>;
 	}
 
 	#[pallet::event]
@@ -143,22 +143,10 @@ pub mod pallet {
 	pub enum Error<T> {
 		/// Message came from an invalid outbound channel on the Ethereum side.
 		InvalidGateway,
-		/// Account could not be converted to bytes
-		InvalidAccount,
 		/// Message has an invalid envelope.
 		InvalidMessage,
 		/// Message has an unexpected nonce.
 		InvalidNonce,
-		/// Fee provided is invalid.
-		InvalidFee,
-		/// Message has an invalid payload.
-		InvalidPayload,
-		/// Message channel is invalid
-		InvalidChannel,
-		/// The max nonce for the type has been reached
-		MaxNonceReached,
-		/// Cannot convert location
-		InvalidAccountConversion,
 		/// Invalid network specified
 		InvalidNetwork,
 		/// Pallet is halted
@@ -207,6 +195,12 @@ pub mod pallet {
 	/// The current operating mode of the pallet.
 	#[pallet::storage]
 	pub type OperatingMode<T: Config> = StorageValue<_, BasicOperatingMode, ValueQuery>;
+
+	/// Keep track of tips added for a message as an additional relayer incentivization. The
+	/// key for the storage map is the nonce of the message to which the tip should be added.
+	/// The value is the tip amount, in Ether.
+	#[pallet::storage]
+	pub type Tips<T: Config> = StorageMap<_, Blake2_128Concat, u64, u128, OptionQuery>;
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
@@ -263,8 +257,10 @@ pub mod pallet {
 					Error::<T>::from(error)
 				})?;
 
-			// Pay relayer reward
-			T::RewardPayment::register_reward(&relayer, T::DefaultRewardKind::get(), relayer_fee);
+			// Get the tip and remove it from storage, if a tip was added.
+			let reward = relayer_fee.saturating_add(Tips::<T>::take(nonce).unwrap_or_default());
+
+			T::RewardPayment::register_reward(&relayer, T::DefaultRewardKind::get(), total_reward);
 
 			// Mark message as received
 			Nonce::<T>::set(nonce.into());
@@ -280,14 +276,7 @@ pub mod pallet {
 			xcm: Xcm<()>,
 		) -> Result<XcmHash, SendError> {
 			let (ticket, fee) = validate_send::<T::XcmSender>(dest, xcm)?;
-			let fee_payer = T::AccountToLocation::try_convert(&fee_payer).map_err(|err| {
-				tracing::error!(
-					target: LOG_TARGET,
-					?err,
-					"Failed to convert account to XCM location",
-				);
-				SendError::NotApplicable
-			})?;
+			let fee_payer = T::AccountToLocation::convert(fee_payer);
 			T::XcmExecutor::charge_fees(fee_payer.clone(), fee.clone()).map_err(|error| {
 				tracing::error!(
 					target: LOG_TARGET,
@@ -298,6 +287,18 @@ pub mod pallet {
 			})?;
 			Self::deposit_event(Event::FeesPaid { paying: fee_payer, fees: fee });
 			T::XcmSender::deliver(ticket)
+		}
+	}
+
+	impl<T: Config> AddTip for Pallet<T> {
+		fn add_tip(nonce: u64, amount: u128) -> Result<(), AddTipError> {
+			// If the nonce is already processed, return an error
+			ensure!(!Nonce::<T>::get(nonce.into()), AddTipError::NonceConsumed);
+			// Otherwise add the tip.
+			Tips::<T>::mutate(nonce, |tip| {
+				*tip = Some(tip.unwrap_or_default().saturating_add(amount));
+			});
+			return Ok(())
 		}
 	}
 }

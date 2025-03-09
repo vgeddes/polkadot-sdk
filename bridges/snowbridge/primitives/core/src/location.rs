@@ -10,10 +10,16 @@ pub use polkadot_parachain_primitives::primitives::{
 pub use sp_core::U256;
 
 use codec::Encode;
+use core::marker::PhantomData;
 use sp_core::H256;
+use sp_runtime::traits::Convert;
 use sp_std::prelude::*;
-use xcm::prelude::{
-	AccountId32, AccountKey20, GeneralIndex, GeneralKey, GlobalConsensus, Location, PalletInstance,
+use xcm::{
+	opaque::latest::Junction,
+	prelude::{
+		AccountId32, AccountKey20, GeneralIndex, GeneralKey, GlobalConsensus, Location,
+		PalletInstance,
+	},
 };
 use xcm_builder::{
 	DescribeAllTerminal, DescribeFamily, DescribeLocation, DescribeTerminus, HashedDescription,
@@ -97,6 +103,18 @@ impl DescribeLocation for DescribeTokenTerminal {
 			// Reject all other locations
 			_ => None,
 		}
+	}
+}
+
+/// Conversion implementation which converts from a `[u8; 32]`-based `AccountId` into a
+/// `Location` consisting solely of a `AccountId32` junction with a fixed value for its
+/// network and the `AccountId`'s `[u8; 32]` datum for the `id`.
+pub struct AccountToLocation<AccountId>(PhantomData<AccountId>);
+impl<AccountId: Clone + Into<[u8; 32]> + Clone, Location: core::convert::From<Junction>>
+	Convert<AccountId, Location> for AccountToLocation<AccountId>
+{
+	fn convert(who: AccountId) -> Location {
+		AccountId32 { network: None, id: who.clone().into() }.into()
 	}
 }
 
