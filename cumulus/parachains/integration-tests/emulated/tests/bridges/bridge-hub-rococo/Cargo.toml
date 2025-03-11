@@ -32,6 +32,7 @@ xcm-executor = { workspace = true }
 xcm-runtime-apis = { workspace = true }
 
 # Bridges
+bp-asset-hub-rococo = { workspace = true }
 pallet-bridge-messages = { workspace = true }
 
 # Cumulus

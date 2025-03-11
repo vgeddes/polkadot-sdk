@@ -1030,7 +1030,7 @@ fn create_foreign_asset_deposit_is_equal_to_asset_hub_foreign_asset_pallet_depos
 	let asset_hub_deposit = asset_hub_westend_runtime::ForeignAssetsAssetDeposit::get();
 	let bridge_hub_deposit = bp_asset_hub_westend::CreateForeignAssetDeposit::get();
 	assert!(
-		bridge_hub_deposit <=
+		bridge_hub_deposit >=
 		asset_hub_deposit,
 		"The BridgeHub asset creation deposit must be equal to or larger than the asset creation deposit configured on BridgeHub"
 	);
