@@ -16,7 +16,7 @@
 use crate::{
 	weights, xcm_config,
 	xcm_config::{AssetTransactors, XcmConfig},
-	Runtime, RuntimeEvent,
+	ForeignAssets, Runtime, RuntimeEvent,
 };
 use assets_common::matching::FromSiblingParachain;
 use frame_support::{parameter_types, traits::Everything};
@@ -83,11 +83,14 @@ impl snowbridge_pallet_system_frontend::Config for Runtime {
 	#[cfg(feature = "runtime-benchmarks")]
 	type Helper = ();
 	type RegisterTokenOrigin = EitherOf<
-		ForeignTokenCreator<
+		ForeignTokenCreatorAsOwner<
 			(
 				FromSiblingParachain<parachain_info::Pallet<Runtime>, Location>,
 				xcm_config::bridging::to_rococo::RococoAssetFromAssetHubRococo,
 			),
+			ForeignAssets,
+			crate::AccountId,
+			crate::LocationToAccountId,
 			Location,
 		>,
 		EnsureRootWithSuccess<crate::AccountId, RootLocation>,
@@ -105,19 +108,32 @@ impl snowbridge_pallet_system_frontend::Config for Runtime {
 	type BackendWeightInfo = weights::snowbridge_pallet_system_backend::WeightInfo<Runtime>;
 }
 
-/// `EnsureOriginWithArg` impl for `ForeignTokenCreator` that allows only XCM origins that are
-/// locations containing the class location.
-pub struct ForeignTokenCreator<IsForeign, L = Location>(core::marker::PhantomData<(IsForeign, L)>);
+/// `EnsureOriginWithArg` impl for `ForeignTokenCreator` that
+/// a. allows only XCM origins that are locations containing the class location.
+/// b. check the asset already exists
+/// c. only the owner of the asset can create
+pub struct ForeignTokenCreatorAsOwner<
+	IsForeign,
+	AssetInspect,
+	AccountId,
+	LocationToAccountId,
+	L = Location,
+>(core::marker::PhantomData<(IsForeign, AssetInspect, AccountId, LocationToAccountId, L)>);
 impl<
 		IsForeign: ContainsPair<L, L>,
+		AssetInspect: frame_support::traits::fungibles::roles::Inspect<AccountId>,
+		AccountId: Eq + Clone,
+		LocationToAccountId: xcm_executor::traits::ConvertLocation<AccountId>,
 		RuntimeOrigin: From<XcmOrigin> + OriginTrait + Clone,
-		L: TryFrom<Location> + TryInto<Location> + Clone,
-	> EnsureOriginWithArg<RuntimeOrigin, L> for ForeignTokenCreator<IsForeign, L>
+		L: From<Location> + Into<Location> + Clone,
+	> EnsureOriginWithArg<RuntimeOrigin, L>
+	for ForeignTokenCreatorAsOwner<IsForeign, AssetInspect, AccountId, LocationToAccountId, L>
 where
 	RuntimeOrigin::PalletsOrigin:
 		From<XcmOrigin> + TryInto<XcmOrigin, Error = RuntimeOrigin::PalletsOrigin>,
+	<AssetInspect as frame_support::traits::fungibles::Inspect<AccountId>>::AssetId: From<Location>,
 {
-	type Success = Location;
+	type Success = L;
 
 	fn try_origin(
 		origin: RuntimeOrigin,
@@ -127,9 +143,16 @@ where
 		if !IsForeign::contains(asset_location, &origin_location) {
 			return Err(origin)
 		}
+		let asset_location: Location = asset_location.clone().into();
+		let owner = AssetInspect::owner(asset_location.into());
+		let location: Location = origin_location.clone().into();
+		let from = LocationToAccountId::convert_location(&location);
+		if !owner.eq(&from) {
+			return Err(origin)
+		}
 		let latest_location: Location =
 			origin_location.clone().try_into().map_err(|_| origin.clone())?;
-		Ok(latest_location)
+		Ok(latest_location.into())
 	}
 
 	#[cfg(feature = "runtime-benchmarks")]
