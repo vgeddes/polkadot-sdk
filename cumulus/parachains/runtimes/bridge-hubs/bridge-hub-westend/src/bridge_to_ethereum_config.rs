@@ -76,6 +76,7 @@ parameter_types! {
 }
 
 parameter_types! {
+	pub const CreateAssetDeposit: u128 = CreateForeignAssetDeposit::get() + EXISTENTIAL_DEPOSIT;
 	pub const CreateAssetCall: [u8;2] = [53, 0];
 	pub Parameters: PricingParameters<u128> = PricingParameters {
 		exchange_rate: FixedU128::from_rational(1, 400),
@@ -106,7 +107,7 @@ impl snowbridge_pallet_inbound_queue::Config for Runtime {
 	type Helper = Runtime;
 	type MessageConverter = snowbridge_inbound_queue_primitives::v1::MessageToXcm<
 		CreateAssetCall,
-		CreateForeignAssetDeposit,
+		CreateAssetDeposit,
 		ConstU8<INBOUND_QUEUE_PALLET_INDEX_V1>,
 		AccountId,
 		Balance,
@@ -141,7 +142,7 @@ impl snowbridge_pallet_inbound_queue_v2::Config for Runtime {
 	type WeightToFee = WeightToFee;
 	type MessageConverter = snowbridge_inbound_queue_primitives::v2::MessageToXcm<
 		CreateAssetCall,
-		CreateForeignAssetDeposit,
+		CreateAssetDeposit,
 		EthereumNetwork,
 		InboundQueueLocation,
 		EthereumSystem,

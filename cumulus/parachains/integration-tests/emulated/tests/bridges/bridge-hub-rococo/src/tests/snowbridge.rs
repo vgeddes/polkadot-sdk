@@ -874,3 +874,14 @@ fn send_weth_from_ethereum_to_non_existent_account_on_asset_hub_with_sufficient_
 		);
 	});
 }
+
+#[test]
+fn create_foreign_asset_deposit_is_equal_to_asset_hub_foreign_asset_pallet_deposit() {
+	let asset_hub_deposit = asset_hub_rococo_runtime::ForeignAssetsAssetDeposit::get();
+	let bridge_hub_deposit = bridge_hub_rococo_runtime::bridge_to_ethereum_config::CreateAssetDeposit::get();
+	assert!(
+		bridge_hub_deposit <=
+			asset_hub_deposit,
+		"The BridgeHub asset creation deposit must be equal to or larger than the asset creation deposit configured on BridgeHub"
+	);
+}
