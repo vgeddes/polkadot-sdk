@@ -48,6 +48,7 @@ use sp_runtime::{
 	ApplyExtrinsicResult, Permill,
 };
 use testnet_parachains_constants::rococo::snowbridge::EthereumNetwork;
+use bp_asset_hub_rococo::CreateForeignAssetDeposit;
 
 #[cfg(feature = "std")]
 use sp_version::NativeVersion;
