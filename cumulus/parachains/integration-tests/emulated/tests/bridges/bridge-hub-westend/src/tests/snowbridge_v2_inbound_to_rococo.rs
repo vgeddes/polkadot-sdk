@@ -21,9 +21,7 @@ use crate::{
 			erc20_token_location, eth_location, register_foreign_asset, set_up_eth_and_dot_pool,
 			set_up_eth_and_dot_pool_on_rococo, snowbridge_sovereign,
 		},
-		snowbridge_v2_outbound_from_rococo::{
-			asset_hub_westend_location,
-		},
+		snowbridge_v2_outbound_from_rococo::asset_hub_westend_location,
 	},
 };
 use asset_hub_westend_runtime::ForeignAssets;
@@ -37,7 +35,7 @@ use snowbridge_inbound_queue_primitives::v2::{
 	EthereumAsset::NativeTokenERC20, Message, XcmPayload,
 };
 use sp_core::{H160, H256};
-use xcm::opaque::{latest::AssetTransferFilter::ReserveDeposit};
+use xcm::opaque::latest::AssetTransferFilter::ReserveDeposit;
 
 /// Calculates the XCM prologue fee for sending an XCM to AH.
 const INITIAL_FUND: u128 = 5_000_000_000_000;
@@ -75,9 +73,7 @@ fn send_token_to_rococo_v2() {
 		sp_runtime::AccountId32::from(beneficiary_acc_bytes),
 		3_000_000_000_000,
 	)]);
-	//BridgeHubWestend::fund_accounts(vec![(relayer_account.clone(), INITIAL_FUND)]);
 	BridgeHubWestend::fund_para_sovereign(AssetHubWestend::para_id(), INITIAL_FUND);
-	AssetHubWestend::fund_accounts(vec![(snowbridge_sovereign(), INITIAL_FUND)]);
 
 	// Register the token on AH Westend and Rococo
 	let snowbridge_sovereign = snowbridge_sovereign();
@@ -229,6 +225,160 @@ fn send_token_to_rococo_v2() {
 		assert_eq!(
 			ForeignAssets::balance(token_location, AccountId::from(beneficiary_acc_bytes)),
 			token_transfer_value
+		);
+
+		let events = AssetHubRococo::events();
+		// Check that no assets were trapped
+		assert!(
+			!events.iter().any(|event| matches!(
+				event,
+				RuntimeEvent::PolkadotXcm(pallet_xcm::Event::AssetsTrapped { .. })
+			)),
+			"Assets were trapped on Penpal, should not happen."
+		);
+	});
+}
+
+#[test]
+fn send_ether_to_rococo_v2() {
+	let relayer_account = BridgeHubWestendSender::get();
+	let relayer_reward = 1_500_000_000_000u128;
+
+	let beneficiary_acc_id: H256 = H256::random();
+	let beneficiary_acc_bytes: [u8; 32] = beneficiary_acc_id.into();
+	let beneficiary =
+		Location::new(0, AccountId32 { network: None, id: beneficiary_acc_id.into() });
+
+	let claimer_acc_id = H256::random();
+	let claimer = AccountId32 { network: None, id: claimer_acc_id.into() };
+	let claimer_bytes = claimer.encode();
+
+	// set XCM versions
+	BridgeHubWestend::force_xcm_version(asset_hub_westend_location(), XCM_VERSION);
+	BridgeHubWestend::force_xcm_version(asset_hub_rococo_location(), XCM_VERSION);
+	AssetHubWestend::force_xcm_version(asset_hub_rococo_location(), XCM_VERSION);
+
+	// To pay fees on Rococo.
+	let eth_fee_rococo_ah: xcm::prelude::Asset = (eth_location(), 2_000_000_000_000u128).into();
+	let ether_asset_ah: xcm::prelude::Asset = (eth_location(), 4_000_000_000_000u128).into();
+
+	// To satisfy ED
+	AssetHubRococo::fund_accounts(vec![(
+		sp_runtime::AccountId32::from(beneficiary_acc_bytes),
+		3_000_000_000_000,
+	)]);
+	BridgeHubWestend::fund_para_sovereign(AssetHubWestend::para_id(), INITIAL_FUND);
+
+	set_up_eth_and_dot_pool();
+	set_up_eth_and_dot_pool_on_rococo();
+	BridgeHubWestend::execute_with(|| {
+		type RuntimeEvent = <BridgeHubWestend as Chain>::RuntimeEvent;
+		let instructions = vec![
+			// Send message to Rococo AH
+			InitiateTransfer {
+				// Rococo
+				destination: Location::new(
+					2,
+					[
+						GlobalConsensus(ByGenesis(xcm::latest::ROCOCO_GENESIS_HASH)),
+						Parachain(1000u32),
+					],
+				),
+				remote_fees: Some(ReserveDeposit(Definite(vec![eth_fee_rococo_ah.clone()].into()))),
+				preserve_origin: false,
+				assets: vec![ReserveDeposit(Definite(vec![ether_asset_ah.clone()].into()))],
+				remote_xcm: vec![
+					// Refund unspent fees
+					RefundSurplus,
+					// Deposit assets to beneficiary.
+					DepositAsset { assets: Wild(AllCounted(3)), beneficiary: beneficiary.clone() },
+					SetTopic(H256::random().into()),
+				]
+				.into(),
+			},
+			RefundSurplus,
+			DepositAsset {
+				assets: Wild(AllOf { id: AssetId(eth_location()), fun: WildFungibility::Fungible }),
+				beneficiary,
+			},
+		];
+		let xcm: Xcm<()> = instructions.into();
+		let versioned_message_xcm = VersionedXcm::V5(xcm);
+		let origin = EthereumGatewayAddress::get();
+
+		let message = Message {
+			gateway: origin,
+			nonce: 1,
+			origin,
+			assets: vec![],
+			xcm: XcmPayload::Raw(versioned_message_xcm.encode()),
+			claimer: Some(claimer_bytes),
+			value: 6_500_000_000_000u128,
+			execution_fee: 1_500_000_000_000u128,
+			relayer_fee: relayer_reward,
+		};
+
+		EthereumInboundQueueV2::process_message(relayer_account.clone(), message).unwrap();
+
+		assert_expected_events!(
+			BridgeHubWestend,
+			vec![
+				RuntimeEvent::XcmpQueue(cumulus_pallet_xcmp_queue::Event::XcmpMessageSent { .. }) => {},
+				// Check that the relayer reward was registered.
+				RuntimeEvent::BridgeRelayers(pallet_bridge_relayers::Event::RewardRegistered { relayer, reward_kind, reward_balance }) => {
+					relayer: *relayer == relayer_account,
+					reward_kind: *reward_kind == BridgeReward::Snowbridge,
+					reward_balance: *reward_balance == relayer_reward,
+				},
+			]
+		);
+	});
+
+	AssetHubWestend::execute_with(|| {
+		type RuntimeEvent = <AssetHubWestend as Chain>::RuntimeEvent;
+		// Check that the assets were issued on AssetHub
+		assert_expected_events!(
+			AssetHubWestend,
+			vec![
+				// Message processed successfully
+				RuntimeEvent::MessageQueue(
+					pallet_message_queue::Event::Processed { success: true, .. }
+				) => {},
+				RuntimeEvent::XcmpQueue(cumulus_pallet_xcmp_queue::Event::XcmpMessageSent { .. }) => {},
+			]
+		);
+
+		let events = AssetHubWestend::events();
+		// Check that no assets were trapped
+		assert!(
+			!events.iter().any(|event| matches!(
+				event,
+				RuntimeEvent::PolkadotXcm(pallet_xcm::Event::AssetsTrapped { .. })
+			)),
+			"Assets were trapped, should not happen."
+		);
+	});
+
+	assert_bridge_hub_westend_message_accepted(true);
+
+	assert_bridge_hub_rococo_message_received();
+
+	AssetHubRococo::execute_with(|| {
+		type RuntimeEvent = <AssetHubRococo as Chain>::RuntimeEvent;
+
+		assert_expected_events!(
+			AssetHubRococo,
+			vec![
+				// Message processed successfully
+				RuntimeEvent::MessageQueue(
+					pallet_message_queue::Event::Processed { success: true, .. }
+				) => {},
+				// Ether was deposited to beneficiary
+				RuntimeEvent::ForeignAssets(pallet_assets::Event::Issued { asset_id, owner, .. }) => {
+					asset_id: *asset_id == eth_location(),
+					owner: *owner == beneficiary_acc_bytes.into(),
+				},
+			]
 		);
 
 		let events = AssetHubRococo::events();
