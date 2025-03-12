@@ -340,6 +340,12 @@ pub(crate) fn set_up_eth_and_dot_pool_on_penpal() {
 	create_pool_with_native_on!(PenpalB, eth_location(), true, ethereum_sovereign.clone());
 }
 
+pub(crate) fn set_up_eth_and_dot_pool_on_rococo() {
+	let ethereum_sovereign = snowbridge_sovereign();
+	AssetHubRococo::fund_accounts(vec![(ethereum_sovereign.clone(), INITIAL_FUND)]);
+	create_pool_with_native_on!(AssetHubRococo, eth_location(), true, ethereum_sovereign.clone());
+}
+
 pub fn register_pal_on_bh() {
 	BridgeHubWestend::execute_with(|| {
 		type RuntimeEvent = <BridgeHubWestend as Chain>::RuntimeEvent;

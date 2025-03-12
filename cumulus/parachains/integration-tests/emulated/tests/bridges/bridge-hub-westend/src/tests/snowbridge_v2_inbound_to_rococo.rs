@@ -50,7 +50,7 @@ const TOKEN_ID: [u8; 20] = hex!("c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2");
 const CHAIN_ID: u64 = 11155111u64;
 
 #[test]
-fn send_ether_to_rococo_v2() {
+fn send_token_to_rococo_v2() {
 	let relayer_account = BridgeHubWestendSender::get();
 	let relayer_reward = 1_500_000_000_000u128;
 
@@ -70,17 +70,17 @@ fn send_ether_to_rococo_v2() {
 	let eth_fee_rococo_ah: xcm::prelude::Asset = (eth_location(), 3_000_000_000_000u128).into();
 
 	// To satisfy ED
-	PenpalB::fund_accounts(vec![(
+	Rococo::fund_accounts(vec![(
 		sp_runtime::AccountId32::from(beneficiary_acc_bytes),
 		3_000_000_000_000,
 	)]);
 
 	let snowbridge_sovereign = snowbridge_sovereign();
-	PenpalB::execute_with(|| {
-		type RuntimeOrigin = <PenpalB as Chain>::RuntimeOrigin;
+	RococoAssetHub::execute_with(|| {
+		type RuntimeOrigin = <RococoAssetHub as Chain>::RuntimeOrigin;
 
 		// Register token on Penpal
-		assert_ok!(<PenpalB as PenpalBPallet>::ForeignAssets::force_create(
+		assert_ok!(<RococoAssetHub as RococoAssetHubPallet>::ForeignAssets::force_create(
 			RuntimeOrigin::root(),
 			token_location.clone().try_into().unwrap(),
 			snowbridge_sovereign.clone().into(),
@@ -88,34 +88,13 @@ fn send_ether_to_rococo_v2() {
 			1000,
 		));
 
-		assert!(<PenpalB as PenpalBPallet>::ForeignAssets::asset_exists(
+		assert!(<RococoAssetHub as RococoAssetHubPallet>::ForeignAssets::asset_exists(
 			token_location.clone().try_into().unwrap(),
-		));
-
-		// Register eth on Penpal
-		assert_ok!(<PenpalB as PenpalBPallet>::ForeignAssets::force_create(
-			RuntimeOrigin::root(),
-			eth_location().try_into().unwrap(),
-			snowbridge_sovereign.clone().into(),
-			true,
-			1000,
-		));
-
-		assert!(<PenpalB as PenpalBPallet>::ForeignAssets::asset_exists(
-			eth_location().try_into().unwrap(),
-		));
-
-		assert_ok!(<PenpalB as Chain>::System::set_storage(
-			<PenpalB as Chain>::RuntimeOrigin::root(),
-			vec![(
-				PenpalCustomizableAssetFromSystemAssetHub::key().to_vec(),
-				Location::new(2, [GlobalConsensus(Ethereum { chain_id: CHAIN_ID })]).encode(),
-			)],
 		));
 	});
 
 	set_up_eth_and_dot_pool();
-	set_up_eth_and_dot_pool_on_penpal();
+	set_up_eth_and_dot_pool_on_rococo();
 
 	let token_transfer_value = 2_000_000_000_000u128;
 
@@ -212,11 +191,11 @@ fn send_ether_to_rococo_v2() {
 		);
 	});
 
-	PenpalB::execute_with(|| {
-		type RuntimeEvent = <PenpalB as Chain>::RuntimeEvent;
+	RococoAssetHub::execute_with(|| {
+		type RuntimeEvent = <RococoAssetHub as Chain>::RuntimeEvent;
 
 		assert_expected_events!(
-			PenpalB,
+			RococoAssetHub,
 			vec![
 				// Message processed successfully
 				RuntimeEvent::MessageQueue(
@@ -241,7 +220,7 @@ fn send_ether_to_rococo_v2() {
 			token_transfer_value
 		);
 
-		let events = PenpalB::events();
+		let events = RococoAssetHub::events();
 		// Check that no assets were trapped
 		assert!(
 			!events.iter().any(|event| matches!(
