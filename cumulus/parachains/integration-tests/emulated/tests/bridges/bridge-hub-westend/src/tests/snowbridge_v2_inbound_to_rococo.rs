@@ -14,45 +14,36 @@
 // limitations under the License.
 use crate::{
 	imports::*,
-	tests::snowbridge_common::{
-		erc20_token_location, eth_location, register_foreign_asset, set_up_eth_and_dot_pool,
-		set_up_eth_and_dot_pool_on_penpal, snowbridge_sovereign, weth_location,
+	tests::{
+		assert_bridge_hub_rococo_message_received, assert_bridge_hub_westend_message_accepted,
+		asset_hub_rococo_location,
+		snowbridge_common::{
+			erc20_token_location, eth_location, register_foreign_asset, set_up_eth_and_dot_pool,
+			set_up_eth_and_dot_pool_on_rococo, snowbridge_sovereign,
+		},
+		snowbridge_v2_outbound_from_rococo::{
+			asset_hub_westend_location,
+		},
 	},
 };
 use asset_hub_westend_runtime::ForeignAssets;
 use bridge_hub_westend_runtime::{
-	bridge_common_config::BridgeReward,
-	bridge_to_ethereum_config::{CreateAssetCall, CreateAssetDeposit, EthereumGatewayAddress},
+	bridge_common_config::BridgeReward, bridge_to_ethereum_config::EthereumGatewayAddress,
 	EthereumInboundQueueV2,
 };
 use codec::Encode;
-use emulated_integration_tests_common::{RESERVABLE_ASSET_ID, WETH};
 use hex_literal::hex;
-use rococo_westend_system_emulated_network::penpal_emulated_chain::PARA_ID_B;
-use snowbridge_core::{AssetMetadata, TokenIdOf};
 use snowbridge_inbound_queue_primitives::v2::{
-	EthereumAsset::{ForeignTokenERC20, NativeTokenERC20},
-	Message, Network, XcmPayload,
+	EthereumAsset::NativeTokenERC20, Message, XcmPayload,
 };
 use sp_core::{H160, H256};
-use sp_io::hashing::blake2_256;
-use sp_runtime::MultiAddress;
-use xcm::opaque::latest::AssetTransferFilter::ReserveDeposit;
-use xcm_executor::traits::ConvertLocation;
-use crate::tests::snowbridge_v2_outbound_from_rococo::asset_hub_westend_location;
-use crate::tests::snowbridge_v2_outbound_from_rococo::bridge_hub_westend_location;
-use crate::tests::snowbridge_common::set_up_eth_and_dot_pool_on_rococo;
-use xcm::opaque::lts::NetworkId::Rococo;
-use crate::tests::asset_hub_rococo_location;
-
-const TOKEN_AMOUNT: u128 = 100_000_000_000;
+use xcm::opaque::{latest::AssetTransferFilter::ReserveDeposit};
 
 /// Calculates the XCM prologue fee for sending an XCM to AH.
 const INITIAL_FUND: u128 = 5_000_000_000_000;
 
 /// An ERC-20 token to be registered and sent.
 const TOKEN_ID: [u8; 20] = hex!("c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2");
-const CHAIN_ID: u64 = 11155111u64;
 
 #[test]
 fn send_token_to_rococo_v2() {
@@ -125,11 +116,15 @@ fn send_token_to_rococo_v2() {
 			// Send message to Rococo AH
 			InitiateTransfer {
 				// Rococo
-				destination: Location::new(2, [
-					GlobalConsensus(ByGenesis(xcm::latest::ROCOCO_GENESIS_HASH)),
-					Parachain(1000u32),]),
+				destination: Location::new(
+					2,
+					[
+						GlobalConsensus(ByGenesis(xcm::latest::ROCOCO_GENESIS_HASH)),
+						Parachain(1000u32),
+					],
+				),
 				remote_fees: Some(ReserveDeposit(Definite(vec![eth_fee_rococo_ah.clone()].into()))),
-				preserve_origin: true,
+				preserve_origin: false,
 				assets: vec![ReserveDeposit(Definite(vec![token_asset_ah.clone()].into()))],
 				remote_xcm: vec![
 					// Refund unspent fees
@@ -203,6 +198,10 @@ fn send_token_to_rococo_v2() {
 		);
 	});
 
+	assert_bridge_hub_westend_message_accepted(true);
+
+	assert_bridge_hub_rococo_message_received();
+
 	AssetHubRococo::execute_with(|| {
 		type RuntimeEvent = <AssetHubRococo as Chain>::RuntimeEvent;
 
@@ -210,9 +209,9 @@ fn send_token_to_rococo_v2() {
 			AssetHubRococo,
 			vec![
 				// Message processed successfully
-				//RuntimeEvent::MessageQueue(
-				//	pallet_message_queue::Event::Processed { success: true, .. }
-				//) => {},
+				RuntimeEvent::MessageQueue(
+					pallet_message_queue::Event::Processed { success: true, .. }
+				) => {},
 				// Token was issued to beneficiary
 				RuntimeEvent::ForeignAssets(pallet_assets::Event::Issued { asset_id, owner, .. }) => {
 					asset_id: *asset_id == token_location,
