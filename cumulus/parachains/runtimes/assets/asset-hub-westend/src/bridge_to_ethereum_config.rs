@@ -15,25 +15,30 @@
 
 use crate::{
 	weights, xcm_config,
-	xcm_config::{AssetTransactors, XcmConfig},
-	ForeignAssets, Runtime, RuntimeEvent,
+	xcm_config::{
+		AssetTransactors, LocationToAccountId, TrustBackedAssetsPalletLocation, UniversalLocation,
+		XcmConfig,
+	},
+	AccountId, Assets, ForeignAssets, Runtime, RuntimeEvent,
 };
-use assets_common::matching::FromSiblingParachain;
-use frame_support::{parameter_types, traits::Everything};
+use assets_common::{matching::FromSiblingParachain, AssetIdForTrustBackedAssetsConvert};
+use frame_support::{
+	dispatch::RawOrigin,
+	parameter_types,
+	traits::{ContainsPair, EitherOf, EnsureOrigin, EnsureOriginWithArg, Everything, OriginTrait},
+};
+use frame_system::{ensure_signed, EnsureRootWithSuccess};
 use pallet_xcm::{EnsureXcm, Origin as XcmOrigin};
+use parachains_common::AssetIdForTrustBackedAssets;
+use sp_runtime::traits::{MaybeEquivalence, TryConvert};
 use testnet_parachains_constants::westend::snowbridge::EthereumNetwork;
 use xcm::prelude::{Asset, InteriorLocation, Location, PalletInstance, Parachain};
 use xcm_executor::XcmExecutor;
 
-use crate::xcm_config::UniversalLocation;
 #[cfg(not(feature = "runtime-benchmarks"))]
 use crate::xcm_config::XcmRouter;
 #[cfg(feature = "runtime-benchmarks")]
 use benchmark_helpers::DoNothingRouter;
-use frame_support::traits::{
-	ContainsPair, EitherOf, EnsureOrigin, EnsureOriginWithArg, OriginTrait,
-};
-use frame_system::EnsureRootWithSuccess;
 
 #[cfg(feature = "runtime-benchmarks")]
 pub mod benchmark_helpers {
@@ -83,17 +88,27 @@ impl snowbridge_pallet_system_frontend::Config for Runtime {
 	#[cfg(feature = "runtime-benchmarks")]
 	type Helper = ();
 	type RegisterTokenOrigin = EitherOf<
-		ForeignTokenCreatorAsOwner<
-			(
-				FromSiblingParachain<parachain_info::Pallet<Runtime>, Location>,
-				xcm_config::bridging::to_rococo::RococoAssetFromAssetHubRococo,
-			),
-			ForeignAssets,
-			crate::AccountId,
-			crate::LocationToAccountId,
-			Location,
+		EitherOf<
+			LocalAssetCreatorAsOwner<
+				AssetIdForTrustBackedAssetsConvert<TrustBackedAssetsPalletLocation, Location>,
+				Assets,
+				AccountId,
+				AssetIdForTrustBackedAssets,
+				xcm_builder::AliasesIntoAccountId32<xcm_config::RelayNetwork, AccountId>,
+				Location,
+			>,
+			ForeignAssetCreatorAsOwner<
+				(
+					FromSiblingParachain<parachain_info::Pallet<Runtime>, Location>,
+					xcm_config::bridging::to_rococo::RococoAssetFromAssetHubRococo,
+				),
+				ForeignAssets,
+				AccountId,
+				LocationToAccountId,
+				Location,
+			>,
 		>,
-		EnsureRootWithSuccess<crate::AccountId, RootLocation>,
+		EnsureRootWithSuccess<AccountId, RootLocation>,
 	>;
 	#[cfg(not(feature = "runtime-benchmarks"))]
 	type XcmSender = XcmRouter;
@@ -108,11 +123,11 @@ impl snowbridge_pallet_system_frontend::Config for Runtime {
 	type BackendWeightInfo = weights::snowbridge_pallet_system_backend::WeightInfo<Runtime>;
 }
 
-/// `EnsureOriginWithArg` impl for `ForeignTokenCreator` that
+/// `EnsureOriginWithArg` impl for `ForeignAssetCreatorAsOwner` that
 /// a. allows only XCM origins that are locations containing the class location.
 /// b. check the asset already exists
 /// c. only the owner of the asset can create
-pub struct ForeignTokenCreatorAsOwner<
+pub struct ForeignAssetCreatorAsOwner<
 	IsForeign,
 	AssetInspect,
 	AccountId,
@@ -127,7 +142,7 @@ impl<
 		RuntimeOrigin: From<XcmOrigin> + OriginTrait + Clone,
 		L: From<Location> + Into<Location> + Clone,
 	> EnsureOriginWithArg<RuntimeOrigin, L>
-	for ForeignTokenCreatorAsOwner<IsForeign, AssetInspect, AccountId, LocationToAccountId, L>
+	for ForeignAssetCreatorAsOwner<IsForeign, AssetInspect, AccountId, LocationToAccountId, L>
 where
 	RuntimeOrigin::PalletsOrigin:
 		From<XcmOrigin> + TryInto<XcmOrigin, Error = RuntimeOrigin::PalletsOrigin>,
@@ -159,5 +174,63 @@ where
 	fn try_successful_origin(a: &L) -> Result<RuntimeOrigin, ()> {
 		let latest_location: Location = (*a).clone().try_into().map_err(|_| ())?;
 		Ok(pallet_xcm::Origin::Xcm(latest_location).into())
+	}
+}
+
+/// `EnsureOriginWithArg` impl for `LocalAssetCreatorAsOwner` that
+/// a. allows signed origins
+/// b. check the asset already exists
+/// c. only the owner of the asset can create
+pub struct LocalAssetCreatorAsOwner<
+	MatchAssetId,
+	AssetInspect,
+	AccountId,
+	AssetId,
+	AccountToLocation,
+	L = Location,
+>(
+	core::marker::PhantomData<(
+		MatchAssetId,
+		AssetInspect,
+		AccountId,
+		AssetId,
+		AccountToLocation,
+		L,
+	)>,
+);
+impl<
+		MatchAssetId: MaybeEquivalence<L, AssetId>,
+		AssetInspect: frame_support::traits::fungibles::roles::Inspect<AccountId>,
+		AccountId: Eq + Clone,
+		AssetId: Eq + Clone,
+		AccountToLocation: for<'a> TryConvert<&'a AccountId, Location>,
+		RuntimeOrigin: OriginTrait + Clone,
+		L: From<Location> + Into<Location> + Clone,
+	> EnsureOriginWithArg<RuntimeOrigin, L>
+	for LocalAssetCreatorAsOwner<MatchAssetId, AssetInspect, AccountId, AssetId, AccountToLocation, L>
+where
+	RuntimeOrigin: Into<Result<RawOrigin<AccountId>, RuntimeOrigin>> + From<RawOrigin<AccountId>>,
+	<AssetInspect as frame_support::traits::fungibles::Inspect<AccountId>>::AssetId: From<AssetId>,
+{
+	type Success = L;
+
+	fn try_origin(
+		origin: RuntimeOrigin,
+		asset_location: &L,
+	) -> Result<Self::Success, RuntimeOrigin> {
+		let who = ensure_signed(origin.clone()).map_err(|_| origin.clone())?;
+		let asset_id = MatchAssetId::convert(asset_location).ok_or(origin.clone())?;
+		let owner = AssetInspect::owner(asset_id.into()).ok_or(origin.clone())?;
+		if !owner.eq(&who) {
+			return Err(origin)
+		}
+		let latest_location: Location =
+			AccountToLocation::try_convert(&who).map_err(|_| origin.clone())?;
+		Ok(latest_location.into())
+	}
+
+	#[cfg(feature = "runtime-benchmarks")]
+	fn try_successful_origin(_: &L) -> Result<RuntimeOrigin, ()> {
+		Ok(RawOrigin::Root.into())
 	}
 }
