@@ -20,17 +20,26 @@ use sp_keyring::Sr25519Keyring as Keyring;
 
 // Cumulus
 use emulated_integration_tests_common::{
-	accounts, build_genesis_storage, collators, PenpalASiblingSovereignAccount,
-	PenpalATeleportableAssetLocation, PenpalBSiblingSovereignAccount,
-	PenpalBTeleportableAssetLocation, RESERVABLE_ASSET_ID, SAFE_XCM_VERSION, USDT_ID,
+	accounts, build_genesis_storage, collators, xcm_emulator::ConvertLocation,
+	PenpalASiblingSovereignAccount, PenpalATeleportableAssetLocation,
+	PenpalBSiblingSovereignAccount, PenpalBTeleportableAssetLocation, RESERVABLE_ASSET_ID,
+	SAFE_XCM_VERSION, USDT_ID,
 };
 use parachains_common::{AccountId, Balance};
+use snowbridge_inbound_queue_primitives::EthereumLocationsConverterFor;
+use testnet_parachains_constants::rococo::snowbridge::EthereumNetwork;
 
 pub const PARA_ID: u32 = 1000;
 pub const ED: Balance = testnet_parachains_constants::rococo::currency::EXISTENTIAL_DEPOSIT;
 
 parameter_types! {
 	pub AssetHubRococoAssetOwner: AccountId = Keyring::Alice.to_account_id();
+	pub EthereumSovereignAccount: AccountId = EthereumLocationsConverterFor::<AccountId>::convert_location(
+		&xcm::v5::Location::new(
+			2,
+			[xcm::v5::Junction::GlobalConsensus(EthereumNetwork::get())],
+		),
+	).unwrap();
 }
 
 pub fn genesis() -> Storage {
@@ -91,6 +100,16 @@ pub fn genesis() -> Storage {
 					PenpalBTeleportableAssetLocation::get(),
 					PenpalBSiblingSovereignAccount::get(),
 					false,
+					ED,
+				),
+				// Ether
+				(
+					xcm::v5::Location::new(
+						2,
+						[xcm::v5::Junction::GlobalConsensus(EthereumNetwork::get())],
+					),
+					EthereumSovereignAccount::get(),
+					true,
 					ED,
 				),
 			],
