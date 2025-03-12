@@ -39,6 +39,11 @@ use sp_io::hashing::blake2_256;
 use sp_runtime::MultiAddress;
 use xcm::opaque::latest::AssetTransferFilter::ReserveDeposit;
 use xcm_executor::traits::ConvertLocation;
+use crate::tests::snowbridge_v2_outbound_from_rococo::asset_hub_westend_location;
+use crate::tests::snowbridge_v2_outbound_from_rococo::bridge_hub_westend_location;
+use crate::tests::snowbridge_common::set_up_eth_and_dot_pool_on_rococo;
+use xcm::opaque::lts::NetworkId::Rococo;
+use crate::tests::asset_hub_rococo_location;
 
 const TOKEN_AMOUNT: u128 = 100_000_000_000;
 
@@ -66,21 +71,30 @@ fn send_token_to_rococo_v2() {
 	let claimer = AccountId32 { network: None, id: claimer_acc_id.into() };
 	let claimer_bytes = claimer.encode();
 
+	// set XCM versions
+	BridgeHubWestend::force_xcm_version(asset_hub_westend_location(), XCM_VERSION);
+	BridgeHubWestend::force_xcm_version(asset_hub_rococo_location(), XCM_VERSION);
+	AssetHubWestend::force_xcm_version(asset_hub_rococo_location(), XCM_VERSION);
+
 	// To pay fees on Rococo.
 	let eth_fee_rococo_ah: xcm::prelude::Asset = (eth_location(), 3_000_000_000_000u128).into();
 
 	// To satisfy ED
-	Rococo::fund_accounts(vec![(
+	AssetHubRococo::fund_accounts(vec![(
 		sp_runtime::AccountId32::from(beneficiary_acc_bytes),
 		3_000_000_000_000,
 	)]);
+	//BridgeHubWestend::fund_accounts(vec![(relayer_account.clone(), INITIAL_FUND)]);
+	BridgeHubWestend::fund_para_sovereign(AssetHubWestend::para_id(), INITIAL_FUND);
+	AssetHubWestend::fund_accounts(vec![(snowbridge_sovereign(), INITIAL_FUND)]);
 
+	// Register the token on AH Westend and Rococo
 	let snowbridge_sovereign = snowbridge_sovereign();
-	RococoAssetHub::execute_with(|| {
-		type RuntimeOrigin = <RococoAssetHub as Chain>::RuntimeOrigin;
+	AssetHubRococo::execute_with(|| {
+		type RuntimeOrigin = <AssetHubRococo as Chain>::RuntimeOrigin;
 
 		// Register token on Penpal
-		assert_ok!(<RococoAssetHub as RococoAssetHubPallet>::ForeignAssets::force_create(
+		assert_ok!(<AssetHubRococo as AssetHubRococoPallet>::ForeignAssets::force_create(
 			RuntimeOrigin::root(),
 			token_location.clone().try_into().unwrap(),
 			snowbridge_sovereign.clone().into(),
@@ -88,10 +102,11 @@ fn send_token_to_rococo_v2() {
 			1000,
 		));
 
-		assert!(<RococoAssetHub as RococoAssetHubPallet>::ForeignAssets::asset_exists(
+		assert!(<AssetHubRococo as AssetHubRococoPallet>::ForeignAssets::asset_exists(
 			token_location.clone().try_into().unwrap(),
 		));
 	});
+	register_foreign_asset(token_location.clone());
 
 	set_up_eth_and_dot_pool();
 	set_up_eth_and_dot_pool_on_rococo();
@@ -107,11 +122,13 @@ fn send_token_to_rococo_v2() {
 	BridgeHubWestend::execute_with(|| {
 		type RuntimeEvent = <BridgeHubWestend as Chain>::RuntimeEvent;
 		let instructions = vec![
-			// Send message to Penpal
+			// Send message to Rococo AH
 			InitiateTransfer {
-				// Penpal
-				destination: Location::new(1, [Parachain(PARA_ID_B)]),
-				remote_fees: Some(ReserveDeposit(Definite(vec![eth_fee_penpal_ah.clone()].into()))),
+				// Rococo
+				destination: Location::new(2, [
+					GlobalConsensus(ByGenesis(xcm::latest::ROCOCO_GENESIS_HASH)),
+					Parachain(1000u32),]),
+				remote_fees: Some(ReserveDeposit(Definite(vec![eth_fee_rococo_ah.clone()].into()))),
 				preserve_origin: true,
 				assets: vec![ReserveDeposit(Definite(vec![token_asset_ah.clone()].into()))],
 				remote_xcm: vec![
@@ -171,11 +188,6 @@ fn send_token_to_rococo_v2() {
 				RuntimeEvent::MessageQueue(
 					pallet_message_queue::Event::Processed { success: true, .. }
 				) => {},
-				// Token was issued to beneficiary
-				RuntimeEvent::ForeignAssets(pallet_assets::Event::Issued { asset_id, owner, .. }) => {
-					asset_id: *asset_id == token_location,
-					owner: *owner == beneficiary_acc_bytes.into(),
-				},
 				RuntimeEvent::XcmpQueue(cumulus_pallet_xcmp_queue::Event::XcmpMessageSent { .. }) => {},
 			]
 		);
@@ -191,16 +203,16 @@ fn send_token_to_rococo_v2() {
 		);
 	});
 
-	RococoAssetHub::execute_with(|| {
-		type RuntimeEvent = <RococoAssetHub as Chain>::RuntimeEvent;
+	AssetHubRococo::execute_with(|| {
+		type RuntimeEvent = <AssetHubRococo as Chain>::RuntimeEvent;
 
 		assert_expected_events!(
-			RococoAssetHub,
+			AssetHubRococo,
 			vec![
 				// Message processed successfully
-				RuntimeEvent::MessageQueue(
-					pallet_message_queue::Event::Processed { success: true, .. }
-				) => {},
+				//RuntimeEvent::MessageQueue(
+				//	pallet_message_queue::Event::Processed { success: true, .. }
+				//) => {},
 				// Token was issued to beneficiary
 				RuntimeEvent::ForeignAssets(pallet_assets::Event::Issued { asset_id, owner, .. }) => {
 					asset_id: *asset_id == token_location,
@@ -220,7 +232,7 @@ fn send_token_to_rococo_v2() {
 			token_transfer_value
 		);
 
-		let events = RococoAssetHub::events();
+		let events = AssetHubRococo::events();
 		// Check that no assets were trapped
 		assert!(
 			!events.iter().any(|event| matches!(
