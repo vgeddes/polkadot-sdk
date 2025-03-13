@@ -182,7 +182,7 @@ pub fn register_usdt_not_from_owner_on_asset_hub_will_fail() {
 
 		assert_noop!(
 			<AssetHubWestend as AssetHubWestendPallet>::SnowbridgeSystemFrontend::register_token(
-				// The wwner is Alice, while AssetHubWestendReceiver is Bob, so it should fail
+				// The owner is Alice, while AssetHubWestendReceiver is Bob, so it should fail
 				RuntimeOrigin::signed(AssetHubWestendReceiver::get()),
 				bx!(VersionedLocation::from(usdt_at_ah_westend())),
 				AssetMetadata {
