@@ -30,7 +30,7 @@ use frame_support::{
 use frame_system::{ensure_signed, EnsureRootWithSuccess};
 use pallet_xcm::{EnsureXcm, Origin as XcmOrigin};
 use parachains_common::AssetIdForTrustBackedAssets;
-use sp_runtime::traits::{MaybeEquivalence};
+use sp_runtime::traits::MaybeEquivalence;
 use testnet_parachains_constants::westend::snowbridge::EthereumNetwork;
 use xcm::prelude::{Asset, InteriorLocation, Location, PalletInstance, Parachain};
 use xcm_executor::XcmExecutor;
@@ -164,9 +164,7 @@ where
 		if from != owner {
 			return Err(origin)
 		}
-		let latest_location: Location =
-			origin_location.clone().try_into().map_err(|_| origin.clone())?;
-		Ok(latest_location.into())
+		Ok(location.into())
 	}
 
 	#[cfg(feature = "runtime-benchmarks")]
@@ -180,20 +178,8 @@ where
 /// a. allows signed origins
 /// b. check the asset already exists
 /// c. only the owner of the asset can create
-pub struct LocalAssetCreatorAsOwner<
-	MatchAssetId,
-	AssetInspect,
-	AccountId,
-	AssetId,
-	L = Location,
->(
-	core::marker::PhantomData<(
-		MatchAssetId,
-		AssetInspect,
-		AccountId,
-		AssetId,
-		L,
-	)>,
+pub struct LocalAssetCreatorAsOwner<MatchAssetId, AssetInspect, AccountId, AssetId, L = Location>(
+	core::marker::PhantomData<(MatchAssetId, AssetInspect, AccountId, AssetId, L)>,
 );
 impl<
 		MatchAssetId: MaybeEquivalence<L, AssetId>,
