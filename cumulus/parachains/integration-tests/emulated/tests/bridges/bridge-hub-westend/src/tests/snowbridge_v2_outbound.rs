@@ -163,6 +163,14 @@ pub fn register_usdt_from_owner_on_asset_hub() {
 			)
 		);
 	});
+
+	BridgeHubWestend::execute_with(|| {
+		type RuntimeEvent = <BridgeHubWestend as Chain>::RuntimeEvent;
+		assert_expected_events!(
+			BridgeHubWestend,
+			vec![RuntimeEvent::EthereumOutboundQueueV2(snowbridge_pallet_outbound_queue_v2::Event::MessageQueued{ .. }) => {},]
+		);
+	});
 }
 
 #[test]
