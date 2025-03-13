@@ -26,20 +26,25 @@ use emulated_integration_tests_common::{
 	SAFE_XCM_VERSION, USDT_ID,
 };
 use parachains_common::{AccountId, Balance};
-use snowbridge_inbound_queue_primitives::EthereumLocationsConverterFor;
 use testnet_parachains_constants::rococo::snowbridge::EthereumNetwork;
+use xcm::{latest::prelude::*, opaque::latest::ROCOCO_GENESIS_HASH};
+use xcm_builder::ExternalConsensusLocationsConverterFor;
 
 pub const PARA_ID: u32 = 1000;
 pub const ED: Balance = testnet_parachains_constants::rococo::currency::EXISTENTIAL_DEPOSIT;
 
 parameter_types! {
 	pub AssetHubRococoAssetOwner: AccountId = Keyring::Alice.to_account_id();
-	pub EthereumSovereignAccount: AccountId = EthereumLocationsConverterFor::<AccountId>::convert_location(
-		&xcm::v5::Location::new(
+	pub RococoGlobalConsensusNetwork: NetworkId = NetworkId::ByGenesis(ROCOCO_GENESIS_HASH);
+	pub AssetHubRococoUniversalLocation: InteriorLocation = [GlobalConsensus(RococoGlobalConsensusNetwork::get()), Parachain(PARA_ID)].into();
+	pub EthereumSovereignAccount: AccountId = ExternalConsensusLocationsConverterFor::<
+			AssetHubRococoUniversalLocation,
+			AccountId,
+		>::convert_location(&Location::new(
 			2,
-			[xcm::v5::Junction::GlobalConsensus(EthereumNetwork::get())],
-		),
-	).unwrap();
+			[Junction::GlobalConsensus(EthereumNetwork::get())],
+		))
+		.unwrap();
 }
 
 pub fn genesis() -> Storage {
@@ -104,10 +109,7 @@ pub fn genesis() -> Storage {
 				),
 				// Ether
 				(
-					xcm::v5::Location::new(
-						2,
-						[xcm::v5::Junction::GlobalConsensus(EthereumNetwork::get())],
-					),
+					xcm::v5::Location::new(2, [GlobalConsensus(EthereumNetwork::get())]),
 					EthereumSovereignAccount::get(),
 					true,
 					ED,

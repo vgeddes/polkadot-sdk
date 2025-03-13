@@ -491,12 +491,6 @@ pub mod pallet {
 			let token_id = TokenIdOf::convert_location(&location)
 				.ok_or(Error::<T>::LocationConversionFailed)?;
 
-			log::info!(
-				target: "xcm-snowbridge-system",
-				"💫 location: {:?} token_id: {:?}",
-				location, token_id
-			);
-
 			if !ForeignToNativeId::<T>::contains_key(token_id) {
 				NativeToForeignId::<T>::insert(location.clone(), token_id);
 				ForeignToNativeId::<T>::insert(token_id, location.clone());
