@@ -18,8 +18,11 @@ use crate::{
 		assert_bridge_hub_rococo_message_received, assert_bridge_hub_westend_message_accepted,
 		asset_hub_rococo_location,
 		snowbridge_common::{
-			erc20_token_location, eth_location, register_foreign_asset, set_up_eth_and_dot_pool,
-			set_up_eth_and_dot_pool_on_rococo, snowbridge_sovereign,
+			asset_hub_westend_location, bridged_roc_at_ah_westend, create_foreign_on_ah_westend,
+			erc20_token_location, eth_location, fund_on_bh, register_foreign_asset,
+			register_roc_on_bh, set_up_eth_and_dot_pool,
+			set_up_eth_and_dot_pool_on_rococo, set_up_pool_with_wnd_on_ah_westend,
+			snowbridge_sovereign, TOKEN_AMOUNT,
 		},
 	},
 };
@@ -30,23 +33,14 @@ use bridge_hub_westend_runtime::{
 };
 use codec::Encode;
 use hex_literal::hex;
+use snowbridge_core::TokenIdOf;
 use snowbridge_inbound_queue_primitives::v2::{
-	EthereumAsset::NativeTokenERC20, Message, XcmPayload,
+	EthereumAsset::{ForeignTokenERC20, NativeTokenERC20},
+	Message, XcmPayload,
 };
 use sp_core::{H160, H256};
-use xcm::opaque::latest::AssetTransferFilter::ReserveDeposit;
-use crate::tests::snowbridge_common::roc_at_ah_rococo;
-use crate::tests::snowbridge_common::bridged_roc_at_ah_westend;
-use crate::tests::snowbridge_common::create_foreign_on_ah_westend;
-use crate::tests::snowbridge_common::set_up_pool_with_wnd_on_ah_westend;
-use crate::tests::snowbridge_common::TOKEN_AMOUNT;
-use xcm::opaque::latest::AssetTransferFilter::ReserveWithdraw;
-use snowbridge_inbound_queue_primitives::v2::EthereumAsset::ForeignTokenERC20;
-use snowbridge_core::TokenIdOf;
-use crate::tests::snowbridge_common::fund_on_bh;
+use xcm::opaque::latest::AssetTransferFilter::{ReserveDeposit, ReserveWithdraw};
 use xcm_executor::traits::ConvertLocation;
-use crate::tests::snowbridge_common::register_roc_on_bh;
-use crate::tests::snowbridge_common::asset_hub_westend_location;
 
 /// Calculates the XCM prologue fee for sending an XCM to AH.
 const INITIAL_FUND: u128 = 500_000_000_000_000;
@@ -408,9 +402,6 @@ fn send_ether_to_rococo_v2() {
 fn send_roc_from_ethereum_to_rococo() {
 	let initial_fund: u128 = 200_000_000_000_000;
 	let initial_liquidity: u128 = initial_fund / 2;
-	let amount: u128 = initial_fund;
-	let roc_fee_amount: u128 = initial_liquidity / 2;
-	let wnd_amount_to_swap: u128 = initial_liquidity / 10;
 
 	let relayer_account = BridgeHubWestendSender::get();
 	let relayer_reward = 1_500_000_000_000u128;
@@ -423,8 +414,6 @@ fn send_roc_from_ethereum_to_rococo() {
 	BridgeHubWestend::fund_para_sovereign(AssetHubWestend::para_id(), INITIAL_FUND);
 
 	let ethereum_sovereign: AccountId = snowbridge_sovereign();
-	let sender = AssetHubRococoSender::get();
-	let roc_at_asset_hub_rococo = roc_at_ah_rococo();
 	let bridged_roc_at_asset_hub_westend = bridged_roc_at_ah_westend();
 	create_foreign_on_ah_westend(bridged_roc_at_asset_hub_westend.clone(), true);
 	set_up_pool_with_wnd_on_ah_westend(
@@ -447,21 +436,13 @@ fn send_roc_from_ethereum_to_rococo() {
 	BridgeHubWestend::force_xcm_version(asset_hub_rococo_location(), XCM_VERSION);
 	AssetHubWestend::force_xcm_version(asset_hub_rococo_location(), XCM_VERSION);
 
-	let local_fee_asset: Asset = (roc_at_asset_hub_rococo.clone(), roc_fee_amount).into();
-	let assets: Assets = (roc_at_asset_hub_rococo.clone(), amount).into();
-	let asset: Asset =
-		(roc_at_asset_hub_rococo.clone(), amount - roc_fee_amount * 2).into();
-	let roc_at_asset_hub_rococo_reanchored: Asset =
-		(bridged_roc_at_asset_hub_westend.clone(), (amount - roc_fee_amount * 2) / 2).into();
-
 	let eth_fee_rococo_ah: xcm::prelude::Asset = (eth_location(), 2_000_000_000_000u128).into();
-
 
 	let roc = Location::new(1, [GlobalConsensus(ByGenesis(ROCOCO_GENESIS_HASH))]);
 	let token_id = TokenIdOf::convert_location(&roc).unwrap();
 
-	let roc_asset: xcm::prelude::Asset = (roc, TOKEN_AMOUNT).into();
-	let roc_global_asset: xcm::prelude::Asset = (Location::new(2, [GlobalConsensus(ByGenesis(ROCOCO_GENESIS_HASH))]), TOKEN_AMOUNT).into();
+	let roc_reachored: xcm::prelude::Asset =
+		(Location::new(2, [GlobalConsensus(ByGenesis(ROCOCO_GENESIS_HASH))]), TOKEN_AMOUNT).into();
 
 	let assets = vec![
 		// the token being transferred
@@ -469,9 +450,7 @@ fn send_roc_from_ethereum_to_rococo() {
 	];
 
 	AssetHubWestend::execute_with(|| {
-		type RuntimeOrigin = <AssetHubWestend as Chain>::RuntimeOrigin;
 		// Mint the asset into the bridge sovereign account, to mimic locked funds
-		let signed_ethereum_sovereign = <AssetHubWestend as Chain>::RuntimeOrigin::signed(ethereum_sovereign.clone());
 		assert_ok!(<AssetHubWestend as AssetHubWestendPallet>::ForeignAssets::mint(
 			<AssetHubWestend as Chain>::RuntimeOrigin::signed(AssetHubWestendAssetOwner::get()),
 			bridged_roc_at_asset_hub_westend.clone().into(),
@@ -489,36 +468,35 @@ fn send_roc_from_ethereum_to_rococo() {
 
 	BridgeHubWestend::execute_with(|| {
 		type RuntimeEvent = <BridgeHubWestend as Chain>::RuntimeEvent;
-		let instructions =
-			vec![
-				// Send message to Rococo AH
-				InitiateTransfer {
-					// Rococo
-					destination: Location::new(
-						2,
-						[
-							GlobalConsensus(ByGenesis(xcm::latest::ROCOCO_GENESIS_HASH)),
-							Parachain(1000u32),
-						],
-					),
-					remote_fees: Some(ReserveDeposit(Definite(vec![eth_fee_rococo_ah.clone()].into()))),
-					preserve_origin: false,
-					assets: vec![ReserveWithdraw(Definite(vec![roc_global_asset.clone()].into()))],
-					remote_xcm: vec![
-						// Refund unspent fees
-						RefundSurplus,
-						// Deposit assets and leftover fees to beneficiary.
-						DepositAsset { assets: Wild(AllCounted(2)), beneficiary: beneficiary.clone() },
-						SetTopic(H256::random().into()),
-					]
-						.into(),
-				},
-				RefundSurplus,
-				DepositAsset {
-					assets: Wild(AllOf { id: AssetId(eth_location()), fun: WildFungibility::Fungible }),
-					beneficiary,
-				}
-			];
+		let instructions = vec![
+			// Send message to Rococo AH
+			InitiateTransfer {
+				// Rococo
+				destination: Location::new(
+					2,
+					[
+						GlobalConsensus(ByGenesis(xcm::latest::ROCOCO_GENESIS_HASH)),
+						Parachain(1000u32),
+					],
+				),
+				remote_fees: Some(ReserveDeposit(Definite(vec![eth_fee_rococo_ah.clone()].into()))),
+				preserve_origin: false,
+				assets: vec![ReserveWithdraw(Definite(vec![roc_reachored.clone()].into()))],
+				remote_xcm: vec![
+					// Refund unspent fees
+					RefundSurplus,
+					// Deposit assets and leftover fees to beneficiary.
+					DepositAsset { assets: Wild(AllCounted(2)), beneficiary: beneficiary.clone() },
+					SetTopic(H256::random().into()),
+				]
+				.into(),
+			},
+			RefundSurplus,
+			DepositAsset {
+				assets: Wild(AllOf { id: AssetId(eth_location()), fun: WildFungibility::Fungible }),
+				beneficiary,
+			},
+		];
 		let xcm: Xcm<()> = instructions.into();
 		let versioned_message_xcm = VersionedXcm::V5(xcm);
 		let origin = EthereumGatewayAddress::get();
@@ -590,7 +568,7 @@ fn send_roc_from_ethereum_to_rococo() {
 					pallet_balances::Event::Burned { who, amount }
 				) => {
 					who: *who == sov_ahw_on_ahr,
-					amount: *amount == 2u128,
+					amount: *amount == TOKEN_AMOUNT,
 				},
 				// ROCs deposited to beneficiary
 				RuntimeEvent::Balances(pallet_balances::Event::Minted { who, .. }) => {
