@@ -30,7 +30,7 @@ use frame_support::{
 use frame_system::{ensure_signed, EnsureRootWithSuccess};
 use pallet_xcm::{EnsureXcm, Origin as XcmOrigin};
 use parachains_common::AssetIdForTrustBackedAssets;
-use sp_runtime::traits::{MaybeEquivalence, TryConvert};
+use sp_runtime::traits::{MaybeEquivalence};
 use testnet_parachains_constants::westend::snowbridge::EthereumNetwork;
 use xcm::prelude::{Asset, InteriorLocation, Location, PalletInstance, Parachain};
 use xcm_executor::XcmExecutor;
@@ -94,7 +94,6 @@ impl snowbridge_pallet_system_frontend::Config for Runtime {
 				Assets,
 				AccountId,
 				AssetIdForTrustBackedAssets,
-				xcm_builder::AliasesIntoAccountId32<xcm_config::RelayNetwork, AccountId>,
 				Location,
 			>,
 			ForeignAssetCreatorAsOwner<
@@ -162,7 +161,7 @@ where
 		let owner = AssetInspect::owner(asset_location.into());
 		let location: Location = origin_location.clone().into();
 		let from = LocationToAccountId::convert_location(&location);
-		if !owner.eq(&from) {
+		if from != owner {
 			return Err(origin)
 		}
 		let latest_location: Location =
@@ -186,7 +185,6 @@ pub struct LocalAssetCreatorAsOwner<
 	AssetInspect,
 	AccountId,
 	AssetId,
-	AccountToLocation,
 	L = Location,
 >(
 	core::marker::PhantomData<(
@@ -194,20 +192,18 @@ pub struct LocalAssetCreatorAsOwner<
 		AssetInspect,
 		AccountId,
 		AssetId,
-		AccountToLocation,
 		L,
 	)>,
 );
 impl<
 		MatchAssetId: MaybeEquivalence<L, AssetId>,
 		AssetInspect: frame_support::traits::fungibles::roles::Inspect<AccountId>,
-		AccountId: Eq + Clone,
+		AccountId: Eq + Clone + Into<L>,
 		AssetId: Eq + Clone,
-		AccountToLocation: for<'a> TryConvert<&'a AccountId, Location>,
 		RuntimeOrigin: OriginTrait + Clone,
 		L: From<Location> + Into<Location> + Clone,
 	> EnsureOriginWithArg<RuntimeOrigin, L>
-	for LocalAssetCreatorAsOwner<MatchAssetId, AssetInspect, AccountId, AssetId, AccountToLocation, L>
+	for LocalAssetCreatorAsOwner<MatchAssetId, AssetInspect, AccountId, AssetId, L>
 where
 	RuntimeOrigin: Into<Result<RawOrigin<AccountId>, RuntimeOrigin>> + From<RawOrigin<AccountId>>,
 	<AssetInspect as frame_support::traits::fungibles::Inspect<AccountId>>::AssetId: From<AssetId>,
@@ -221,12 +217,10 @@ where
 		let who = ensure_signed(origin.clone()).map_err(|_| origin.clone())?;
 		let asset_id = MatchAssetId::convert(asset_location).ok_or(origin.clone())?;
 		let owner = AssetInspect::owner(asset_id.into()).ok_or(origin.clone())?;
-		if !owner.eq(&who) {
+		if who != owner {
 			return Err(origin)
 		}
-		let latest_location: Location =
-			AccountToLocation::try_convert(&who).map_err(|_| origin.clone())?;
-		Ok(latest_location.into())
+		Ok(who.into())
 	}
 
 	#[cfg(feature = "runtime-benchmarks")]
