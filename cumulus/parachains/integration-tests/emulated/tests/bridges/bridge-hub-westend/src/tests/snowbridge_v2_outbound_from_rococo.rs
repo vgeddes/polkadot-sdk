@@ -22,7 +22,6 @@ use crate::{
 };
 use frame_support::traits::fungibles::Mutate;
 use xcm::latest::AssetTransferFilter;
-use emulated_integration_tests_common::RESERVABLE_ASSET_ID;
 
 pub(crate) fn create_foreign_on_ah_westend(id: xcm::opaque::v5::Location, sufficient: bool) {
 	let owner = AssetHubWestend::account_id_of(ALICE);

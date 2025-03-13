@@ -40,17 +40,16 @@ use crate::tests::snowbridge_common::bridged_roc_at_ah_westend;
 use crate::tests::snowbridge_common::create_foreign_on_ah_westend;
 use crate::tests::snowbridge_common::set_up_pool_with_wnd_on_ah_westend;
 use crate::tests::snowbridge_common::TOKEN_AMOUNT;
+use xcm::opaque::latest::AssetTransferFilter::ReserveWithdraw;
 use snowbridge_inbound_queue_primitives::v2::EthereumAsset::ForeignTokenERC20;
 use snowbridge_core::TokenIdOf;
 use crate::tests::snowbridge_common::fund_on_bh;
 use xcm_executor::traits::ConvertLocation;
 use crate::tests::snowbridge_common::register_roc_on_bh;
-use crate::tests::snowbridge_common::bridge_hub_westend_location;
 use crate::tests::snowbridge_common::asset_hub_westend_location;
-use crate::tests::snowbridge_common::ethereum;
 
 /// Calculates the XCM prologue fee for sending an XCM to AH.
-const INITIAL_FUND: u128 = 5_000_000_000_000;
+const INITIAL_FUND: u128 = 500_000_000_000_000;
 
 /// An ERC-20 token to be registered and sent.
 const TOKEN_ID: [u8; 20] = hex!("c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2");
@@ -412,7 +411,6 @@ fn send_roc_from_ethereum_to_rococo() {
 	let amount: u128 = initial_fund;
 	let roc_fee_amount: u128 = initial_liquidity / 2;
 	let wnd_amount_to_swap: u128 = initial_liquidity / 10;
-	let wnd_fee_amount: u128 = wnd_amount_to_swap / 10;
 
 	let relayer_account = BridgeHubWestendSender::get();
 	let relayer_reward = 1_500_000_000_000u128;
@@ -449,9 +447,7 @@ fn send_roc_from_ethereum_to_rococo() {
 	BridgeHubWestend::force_xcm_version(asset_hub_rococo_location(), XCM_VERSION);
 	AssetHubWestend::force_xcm_version(asset_hub_rococo_location(), XCM_VERSION);
 
-	// send ROCs, use them for fees
 	let local_fee_asset: Asset = (roc_at_asset_hub_rococo.clone(), roc_fee_amount).into();
-	let remote_fee_on_westend: Asset = (roc_at_asset_hub_rococo.clone(), roc_fee_amount).into();
 	let assets: Assets = (roc_at_asset_hub_rococo.clone(), amount).into();
 	let asset: Asset =
 		(roc_at_asset_hub_rococo.clone(), amount - roc_fee_amount * 2).into();
@@ -465,6 +461,7 @@ fn send_roc_from_ethereum_to_rococo() {
 	let token_id = TokenIdOf::convert_location(&roc).unwrap();
 
 	let roc_asset: xcm::prelude::Asset = (roc, TOKEN_AMOUNT).into();
+	let roc_global_asset: xcm::prelude::Asset = (Location::new(2, [GlobalConsensus(ByGenesis(ROCOCO_GENESIS_HASH))]), TOKEN_AMOUNT).into();
 
 	let assets = vec![
 		// the token being transferred
@@ -483,6 +480,13 @@ fn send_roc_from_ethereum_to_rococo() {
 		));
 	});
 
+	// fund the AHW's SA on AHR with the ROC tokens held in reserve
+	let sov_ahw_on_ahr = AssetHubRococo::sovereign_account_of_parachain_on_other_global_consensus(
+		ByGenesis(WESTEND_GENESIS_HASH),
+		AssetHubWestend::para_id(),
+	);
+	AssetHubRococo::fund_accounts(vec![(sov_ahw_on_ahr.clone(), INITIAL_FUND)]);
+
 	BridgeHubWestend::execute_with(|| {
 		type RuntimeEvent = <BridgeHubWestend as Chain>::RuntimeEvent;
 		let instructions =
@@ -499,11 +503,11 @@ fn send_roc_from_ethereum_to_rococo() {
 					),
 					remote_fees: Some(ReserveDeposit(Definite(vec![eth_fee_rococo_ah.clone()].into()))),
 					preserve_origin: false,
-					assets: vec![ReserveDeposit(Wild(AllCounted(2).into()))],
+					assets: vec![ReserveWithdraw(Definite(vec![roc_global_asset.clone()].into()))],
 					remote_xcm: vec![
 						// Refund unspent fees
 						RefundSurplus,
-						// Deposit assets to beneficiary.
+						// Deposit assets and leftover fees to beneficiary.
 						DepositAsset { assets: Wild(AllCounted(2)), beneficiary: beneficiary.clone() },
 						SetTopic(H256::random().into()),
 					]
@@ -581,15 +585,21 @@ fn send_roc_from_ethereum_to_rococo() {
 		assert_expected_events!(
 			AssetHubRococo,
 			vec![
-				// Message processed successfully
+				// ROC is withdrawn from AHW's SA on AHR
+				RuntimeEvent::Balances(
+					pallet_balances::Event::Burned { who, amount }
+				) => {
+					who: *who == sov_ahw_on_ahr,
+					amount: *amount == 2u128,
+				},
+				// ROCs deposited to beneficiary
+				RuntimeEvent::Balances(pallet_balances::Event::Minted { who, .. }) => {
+					who: *who == AssetHubRococoReceiver::get(),
+				},
+				// message processed successfully
 				RuntimeEvent::MessageQueue(
 					pallet_message_queue::Event::Processed { success: true, .. }
 				) => {},
-				// Ether was deposited to beneficiary
-				//RuntimeEvent::ForeignAssets(pallet_assets::Event::Issued { asset_id, owner, .. }) => {
-				//	asset_id: *asset_id == eth_location(),
-				//	owner: *owner == beneficiary_acc_bytes.into(),
-				//},
 			]
 		);
 
