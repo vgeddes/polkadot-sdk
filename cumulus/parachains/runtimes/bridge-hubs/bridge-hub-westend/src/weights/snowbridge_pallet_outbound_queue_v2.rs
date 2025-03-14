@@ -40,6 +40,7 @@
 
 use frame_support::{traits::Get, weights::Weight};
 use core::marker::PhantomData;
+use frame_support::weights::constants::RocksDbWeight;
 
 /// Weight functions for `snowbridge_outbound_queue`.
 pub struct WeightInfo<T>(PhantomData<T>);
@@ -94,5 +95,11 @@ impl<T: frame_system::Config> snowbridge_pallet_outbound_queue_v2::WeightInfo fo
 			.saturating_add(Weight::from_parts(0, 7200))
 			.saturating_add(T::DbWeight::get().reads(9))
 			.saturating_add(T::DbWeight::get().writes(6))
+	}
+
+	fn on_initialize_when_congested() -> Weight {
+		Weight::from_parts(5_000_000, 0)
+			.saturating_add(T::DbWeight::get().reads(2))
+			.saturating_add(T::DbWeight::get().writes(5))
 	}
 }
