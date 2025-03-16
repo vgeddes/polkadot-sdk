@@ -19,10 +19,9 @@ use crate::{
 		asset_hub_rococo_location,
 		snowbridge_common::{
 			asset_hub_westend_location, bridged_roc_at_ah_westend, create_foreign_on_ah_westend,
-			erc20_token_location, eth_location, fund_on_bh, register_foreign_asset,
-			register_roc_on_bh, set_up_eth_and_dot_pool,
-			set_up_eth_and_dot_pool_on_rococo, set_up_pool_with_wnd_on_ah_westend,
-			snowbridge_sovereign, TOKEN_AMOUNT,
+			erc20_token_location, eth_location, register_foreign_asset, register_roc_on_bh,
+			set_up_eth_and_dot_pool, set_up_eth_and_dot_pool_on_rococo,
+			set_up_pool_with_wnd_on_ah_westend, snowbridge_sovereign, TOKEN_AMOUNT,
 		},
 	},
 };
@@ -85,7 +84,6 @@ fn send_token_to_rococo_v2() {
 	AssetHubRococo::execute_with(|| {
 		type RuntimeOrigin = <AssetHubRococo as Chain>::RuntimeOrigin;
 
-		// Register token on Penpal
 		assert_ok!(<AssetHubRococo as AssetHubRococoPallet>::ForeignAssets::force_create(
 			RuntimeOrigin::root(),
 			token_location.clone().try_into().unwrap(),
@@ -267,11 +265,6 @@ fn send_ether_to_rococo_v2() {
 	let eth_fee_rococo_ah: xcm::prelude::Asset = (eth_location(), 2_000_000_000_000u128).into();
 	let ether_asset_ah: xcm::prelude::Asset = (eth_location(), 4_000_000_000_000u128).into();
 
-	// To satisfy ED
-	AssetHubRococo::fund_accounts(vec![(
-		sp_runtime::AccountId32::from(beneficiary_acc_bytes),
-		3_000_000_000_000,
-	)]);
 	BridgeHubWestend::fund_para_sovereign(AssetHubWestend::para_id(), INITIAL_FUND);
 
 	set_up_eth_and_dot_pool();
@@ -425,7 +418,6 @@ fn send_roc_from_ethereum_to_rococo() {
 
 	BridgeHubRococo::fund_para_sovereign(AssetHubRococo::para_id(), initial_fund);
 	AssetHubRococo::fund_accounts(vec![(AssetHubRococoSender::get(), initial_fund)]);
-	fund_on_bh();
 	register_roc_on_bh();
 
 	set_up_eth_and_dot_pool();
