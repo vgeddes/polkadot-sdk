@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2023 Snowfork <hello@snowfork.com>
+//! Handling of fees for `ExportMessage` on BridgeHub in V1.
 
 use codec::FullCodec;
 use core::marker::PhantomData;
