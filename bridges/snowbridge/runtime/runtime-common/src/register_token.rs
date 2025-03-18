@@ -10,17 +10,14 @@ use frame_system::ensure_signed;
 use pallet_xcm::{EnsureXcm, Origin as XcmOrigin};
 use xcm::prelude::Location;
 
-/// `EnsureOriginWithArg` impl for `ForeignAssetCreatorAsOwner` that
-/// a. allows only XCM origins that are locations containing the class location.
-/// b. check the asset already exists
-/// c. only the owner of the asset can create
-pub struct ForeignAssetCreatorAsOwner<
-	IsForeign,
-	AssetInspect,
-	AccountId,
-	LocationToAccountId,
-	L = Location,
->(core::marker::PhantomData<(IsForeign, AssetInspect, AccountId, LocationToAccountId, L)>);
+/// Origin check that verifies that an origin is the owner of a foreign asset in
+/// the `ForeignAssets` pallet on AssetHub.
+/// 1. Allows XCM origins
+/// 2. Checks that the asset exists
+/// 3. The origin must be the owner of the asset
+pub struct ForeignAssetOwner<IsForeign, AssetInspect, AccountId, LocationToAccountId, L = Location>(
+	core::marker::PhantomData<(IsForeign, AssetInspect, AccountId, LocationToAccountId, L)>,
+);
 impl<
 		IsForeign: ContainsPair<L, L>,
 		AssetInspect: frame_support::traits::fungibles::roles::Inspect<AccountId>,
@@ -29,7 +26,7 @@ impl<
 		RuntimeOrigin: From<XcmOrigin> + OriginTrait + Clone,
 		L: From<Location> + Into<Location> + Clone,
 	> EnsureOriginWithArg<RuntimeOrigin, L>
-	for ForeignAssetCreatorAsOwner<IsForeign, AssetInspect, AccountId, LocationToAccountId, L>
+	for ForeignAssetOwner<IsForeign, AssetInspect, AccountId, LocationToAccountId, L>
 where
 	RuntimeOrigin::PalletsOrigin:
 		From<XcmOrigin> + TryInto<XcmOrigin, Error = RuntimeOrigin::PalletsOrigin>,
@@ -62,11 +59,11 @@ where
 	}
 }
 
-/// `EnsureOriginWithArg` impl for `LocalAssetCreatorAsOwner` that
+/// `EnsureOriginWithArg` impl for `LocalAssetOwner` that
 /// a. allows signed origins
 /// b. check the asset already exists
 /// c. only the owner of the asset can create
-pub struct LocalAssetCreatorAsOwner<MatchAssetId, AssetInspect, AccountId, AssetId, L = Location>(
+pub struct LocalAssetOwner<MatchAssetId, AssetInspect, AccountId, AssetId, L = Location>(
 	core::marker::PhantomData<(MatchAssetId, AssetInspect, AccountId, AssetId, L)>,
 );
 impl<
@@ -77,7 +74,7 @@ impl<
 		RuntimeOrigin: OriginTrait + Clone,
 		L: From<Location> + Into<Location> + Clone,
 	> EnsureOriginWithArg<RuntimeOrigin, L>
-	for LocalAssetCreatorAsOwner<MatchAssetId, AssetInspect, AccountId, AssetId, L>
+	for LocalAssetOwner<MatchAssetId, AssetInspect, AccountId, AssetId, L>
 where
 	RuntimeOrigin: Into<Result<RawOrigin<AccountId>, RuntimeOrigin>> + From<RawOrigin<AccountId>>,
 	<AssetInspect as frame_support::traits::fungibles::Inspect<AccountId>>::AssetId: From<AssetId>,

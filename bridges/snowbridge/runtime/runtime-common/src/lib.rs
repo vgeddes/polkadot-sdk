@@ -10,7 +10,7 @@ pub mod register_token;
 
 pub use fee_handler::XcmExportFeeToSibling;
 
-pub use register_token::{ForeignAssetCreatorAsOwner, LocalAssetCreatorAsOwner};
+pub use register_token::{ForeignAssetOwner, LocalAssetOwner};
 
 #[cfg(test)]
 mod tests;
