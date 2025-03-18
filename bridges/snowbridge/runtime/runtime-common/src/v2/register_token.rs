@@ -10,8 +10,7 @@ use frame_system::ensure_signed;
 use pallet_xcm::{EnsureXcm, Origin as XcmOrigin};
 use xcm::prelude::Location;
 
-/// Origin check that verifies that an origin is the owner of a foreign asset in
-/// the `ForeignAssets` pallet on AssetHub.
+/// Origin check that verifies that an origin is the owner of a foreign asset.
 /// 1. Allows XCM origins
 /// 2. Checks that the asset exists
 /// 3. The origin must be the owner of the asset
