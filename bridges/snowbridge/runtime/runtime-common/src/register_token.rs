@@ -62,10 +62,11 @@ where
 	}
 }
 
-/// `EnsureOriginWithArg` impl for `LocalAssetCreatorAsOwner` that
-/// a. allows signed origins
-/// b. check the asset already exists
-/// c. only the owner of the asset can create
+/// Origin check that verifies that an origin is the owner of a local trusted asset in
+/// the `Assets` pallet on AssetHub.
+/// 1. Allows signed origins
+/// 2. Checks that the asset exists
+/// 3. The origin must be the owner of the asset
 pub struct LocalAssetCreatorAsOwner<MatchAssetId, AssetInspect, AccountId, AssetId, L = Location>(
 	core::marker::PhantomData<(MatchAssetId, AssetInspect, AccountId, AssetId, L)>,
 );
