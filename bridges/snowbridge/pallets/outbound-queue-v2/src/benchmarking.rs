@@ -128,7 +128,7 @@ mod benchmarks {
 	/// Benchmark the entire process flow in the worst-case. This can be used to determine
 	/// appropriate values for the configuration parameters `MaxMessagesPerBlock` and
 	/// `MaxMessagePayloadSize`
-	#[benchmark(extra)]
+	#[benchmark]
 	fn process() -> Result<(), BenchmarkError> {
 		initialize_worst_case::<T>();
 		let origin = AggregateMessageOrigin::SnowbridgeV2([1; 32].into());
