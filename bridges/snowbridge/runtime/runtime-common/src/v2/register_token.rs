@@ -58,8 +58,7 @@ where
 	}
 }
 
-/// Origin check that verifies that an origin is the owner of a local trusted asset in
-/// the `Assets` pallet on AssetHub.
+/// Origin check that verifies that an origin is the owner of a local trusted asset.
 /// 1. Allows signed origins
 /// 2. Checks that the asset exists
 /// 3. The origin must be the owner of the asset
