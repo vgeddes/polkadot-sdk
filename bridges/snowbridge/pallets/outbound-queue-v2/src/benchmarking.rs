@@ -20,7 +20,7 @@ mod benchmarks {
 	use super::*;
 
 	/// Build `Upgrade` message with `MaxMessagePayloadSize`, in the worst-case.
-	fn build_message_in_worst_case<T: Config>() -> (Message, OutboundMessage) {
+	fn build_message<T: Config>() -> (Message, OutboundMessage) {
 		let commands = vec![Command::Upgrade {
 			impl_address: H160::zero(),
 			impl_code_hash: H256::zero(),
@@ -55,7 +55,7 @@ mod benchmarks {
 	}
 
 	/// Initialize `MaxMessagesPerBlock` messages need to be committed, in the worst-case.
-	fn initialize_in_worst_case<T: Config>() {
+	fn initialize_worst_case<T: Config>() {
 		for _ in 0..T::MaxMessagesPerBlock::get() {
 			initialize_with_one_message::<T>();
 		}
@@ -63,7 +63,7 @@ mod benchmarks {
 
 	/// Initialize with a single message
 	fn initialize_with_one_message<T: Config>() {
-		let (message, outbound_message) = build_message_in_worst_case::<T>();
+		let (message, outbound_message) = build_message::<T>();
 		let leaf = <T as Config>::Hashing::hash(&message.encode());
 		MessageLeaves::<T>::append(leaf);
 		Messages::<T>::append(outbound_message);
@@ -72,7 +72,7 @@ mod benchmarks {
 	/// Benchmark for processing a message.
 	#[benchmark]
 	fn do_process_message() -> Result<(), BenchmarkError> {
-		let (enqueued_message, _) = build_message_in_worst_case::<T>();
+		let (enqueued_message, _) = build_message::<T>();
 		let origin = AggregateMessageOrigin::SnowbridgeV2([1; 32].into());
 		let message = enqueued_message.encode();
 
@@ -89,7 +89,7 @@ mod benchmarks {
 	/// Benchmark for producing final messages commitment, in the worst-case
 	#[benchmark]
 	fn commit() -> Result<(), BenchmarkError> {
-		initialize_in_worst_case::<T>();
+		initialize_worst_case::<T>();
 
 		#[block]
 		{
@@ -117,7 +117,7 @@ mod benchmarks {
 	/// Benchmark for `on_initialize` in the worst-case
 	#[benchmark]
 	fn on_initialize_when_congested() -> Result<(), BenchmarkError> {
-		initialize_in_worst_case::<T>();
+		initialize_worst_case::<T>();
 		#[block]
 		{
 			OutboundQueue::<T>::on_initialize(1_u32.into());
@@ -130,9 +130,9 @@ mod benchmarks {
 	/// `MaxMessagePayloadSize`
 	#[benchmark(extra)]
 	fn process() -> Result<(), BenchmarkError> {
-		initialize_in_worst_case::<T>();
+		initialize_worst_case::<T>();
 		let origin = AggregateMessageOrigin::SnowbridgeV2([1; 32].into());
-		let (enqueued_message, _) = build_message_in_worst_case::<T>();
+		let (enqueued_message, _) = build_message::<T>();
 		let message = enqueued_message.encode();
 
 		#[block]
