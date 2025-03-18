@@ -236,7 +236,7 @@ pub mod pallet {
 			Messages::<T>::kill();
 			MessageLeaves::<T>::kill();
 			// Reserve some weight for the `on_finalize` handler
-			T::WeightInfo::on_initialize_when_congested() + T::WeightInfo::commit()
+			T::WeightInfo::on_initialize() + T::WeightInfo::commit()
 		}
 
 		fn on_finalize(_: BlockNumberFor<T>) {

@@ -35,7 +35,7 @@ pub trait WeightInfo {
 	fn commit() -> Weight;
 	fn commit_single() -> Weight;
 	fn submit_delivery_receipt() -> Weight;
-	fn on_initialize_when_congested() -> Weight;
+	fn on_initialize() -> Weight;
 }
 
 // For backwards compatibility and tests.
@@ -88,7 +88,7 @@ impl WeightInfo for () {
 			.saturating_add(RocksDbWeight::get().writes(2))
 	}
 
-	fn on_initialize_when_congested() -> Weight {
+	fn on_initialize() -> Weight {
 		Weight::from_parts(5_000_000, 0)
 			.saturating_add(RocksDbWeight::get().reads(2))
 			.saturating_add(RocksDbWeight::get().writes(5))

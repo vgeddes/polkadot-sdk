@@ -97,7 +97,7 @@ impl<T: frame_system::Config> snowbridge_pallet_outbound_queue_v2::WeightInfo fo
 			.saturating_add(T::DbWeight::get().writes(6))
 	}
 
-	fn on_initialize_when_congested() -> Weight {
+	fn on_initialize() -> Weight {
 		Weight::from_parts(5_000_000, 0)
 			.saturating_add(T::DbWeight::get().reads(2))
 			.saturating_add(T::DbWeight::get().writes(5))

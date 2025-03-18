@@ -116,7 +116,7 @@ mod benchmarks {
 
 	/// Benchmark for `on_initialize` in the worst-case
 	#[benchmark]
-	fn on_initialize_when_congested() -> Result<(), BenchmarkError> {
+	fn on_initialize() -> Result<(), BenchmarkError> {
 		initialize_worst_case::<T>();
 		#[block]
 		{
