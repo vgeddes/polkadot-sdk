@@ -341,8 +341,20 @@ pub type TrustedReserves = (
 	NativeAssetFrom<SystemAssetHubLocation>,
 	AssetPrefixFrom<CustomizableAssetFromSystemAssetHub, SystemAssetHubLocation>,
 );
+
+/// Matches the pair (NativeToken, (AssetHub | Local)).
+/// This is used in the `IsTeleporter` configuration item, meaning accept native token
+/// sending to or coming from AssetHub as a teleport.
+pub struct NativeTokenToAssetHub;
+impl ContainsPair<Asset, Location> for NativeTokenToAssetHub {
+	fn contains(asset: &Asset, origin: &Location) -> bool {
+		matches!(asset.id.0.unpack(), (0, [])) &&
+			(matches!(origin.unpack(), (1, [Parachain(ASSET_HUB_ID)])) ||
+				matches!(origin.parents, 0))
+	}
+}
 pub type TrustedTeleporters =
-	(AssetFromChain<LocalTeleportableToAssetHub, SystemAssetHubLocation>,);
+	(AssetFromChain<LocalTeleportableToAssetHub, SystemAssetHubLocation>, NativeTokenToAssetHub);
 
 pub type WaivedLocations = Equals<RootLocation>;
 /// `AssetId`/`Balance` converter for `TrustBackedAssets`.
@@ -383,6 +395,8 @@ impl xcm_executor::Config for XcmConfig {
 	type Weigher = FixedWeightBounds<UnitWeightCost, RuntimeCall, MaxInstructions>;
 	type Trader = (
 		UsingComponents<WeightToFee, RelayLocation, AccountId, Balances, ToAuthor<Runtime>>,
+		// Allow native asset to pay the execution fee
+		UsingComponents<WeightToFee, PenpalNativeCurrency, AccountId, Balances, ToAuthor<Runtime>>,
 		cumulus_primitives_utility::SwapFirstAssetTrader<
 			RelayLocation,
 			crate::AssetConversion,
