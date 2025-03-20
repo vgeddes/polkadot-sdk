@@ -39,6 +39,7 @@ use benchmark_helpers::DoNothingRouter;
 pub mod benchmark_helpers {
 	use crate::RuntimeOrigin;
 	use codec::Encode;
+	use frame_support::dispatch::RawOrigin;
 	use xcm::prelude::*;
 
 	pub struct DoNothingRouter;
@@ -58,8 +59,8 @@ pub mod benchmark_helpers {
 	}
 
 	impl snowbridge_pallet_system_frontend::BenchmarkHelper<RuntimeOrigin> for () {
-		fn make_xcm_origin(location: Location) -> RuntimeOrigin {
-			RuntimeOrigin::from(pallet_xcm::Origin::Xcm(location))
+		fn make_xcm_origin(_: Location) -> RuntimeOrigin {
+			RuntimeOrigin::from(RawOrigin::Root)
 		}
 	}
 }
