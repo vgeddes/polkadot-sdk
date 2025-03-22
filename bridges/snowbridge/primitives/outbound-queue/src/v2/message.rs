@@ -18,6 +18,7 @@ use alloy_core::{
 	sol_types::SolValue,
 };
 
+/// Bindings for Ethereum types
 pub mod abi {
 	use alloy_core::sol;
 
