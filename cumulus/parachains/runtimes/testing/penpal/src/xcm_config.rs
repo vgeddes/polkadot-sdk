@@ -321,6 +321,10 @@ parameter_types! {
 	///
 	/// By default, it is configured as a `SystemAssetHubLocation` and can be modified using `System::set_storage`.
 	pub storage CustomizableAssetFromSystemAssetHub: Location = SystemAssetHubLocation::get();
+
+	pub const NativeAssetId: AssetId = AssetId(Location::here());
+	pub const NativeAssetFilter: AssetFilter = Wild(AllOf { fun: WildFungible, id: NativeAssetId::get() });
+	pub AssetHubTrustedTeleporter: (AssetFilter, Location) = (NativeAssetFilter::get(), SystemAssetHubLocation::get());
 }
 
 /// Accepts asset with ID `AssetLocation` and is coming from `Origin` chain.
@@ -342,18 +346,12 @@ pub type TrustedReserves = (
 	AssetPrefixFrom<CustomizableAssetFromSystemAssetHub, SystemAssetHubLocation>,
 );
 
-/// Matches the pair (NativeToken, (AssetHub | Local)).
-/// This is used in the `IsTeleporter` configuration item, meaning accept native token
-/// sending to or coming from AssetHub as a teleport.
-pub struct NativeTokenFromAssetHub;
-impl ContainsPair<Asset, Location> for NativeTokenFromAssetHub {
-	fn contains(asset: &Asset, origin: &Location) -> bool {
-		matches!(asset.id.0.unpack(), (0, [])) &&
-			(matches!(origin.unpack(), (1, [Parachain(ASSET_HUB_ID)])))
-	}
-}
-pub type TrustedTeleporters =
-	(AssetFromChain<LocalTeleportableToAssetHub, SystemAssetHubLocation>, NativeTokenFromAssetHub);
+pub type TrustedTeleporters = (
+	AssetFromChain<LocalTeleportableToAssetHub, SystemAssetHubLocation>,
+	// This is used in the `IsTeleporter` configuration, meaning it accepts
+	// native tokens teleported from Asset Hub.
+	xcm_builder::Case<AssetHubTrustedTeleporter>,
+);
 
 pub type WaivedLocations = Equals<RootLocation>;
 /// `AssetId`/`Balance` converter for `TrustBackedAssets`.
