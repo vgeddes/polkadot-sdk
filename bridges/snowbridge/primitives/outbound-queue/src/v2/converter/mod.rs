@@ -41,13 +41,7 @@ pub struct EthereumBlobExporter<
 	)>,
 );
 
-impl<
-		UniversalLocation,
-		EthereumNetwork,
-		OutboundQueue,
-		ConvertAssetId,
-		AssetHubParaId,
-	> ExportXcm
+impl<UniversalLocation, EthereumNetwork, OutboundQueue, ConvertAssetId, AssetHubParaId> ExportXcm
 	for EthereumBlobExporter<
 		UniversalLocation,
 		EthereumNetwork,
