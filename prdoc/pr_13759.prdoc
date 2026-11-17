@@ -9,7 +9,8 @@ doc:
     finalized outbound Data messages, receiver confirmations, pending messages and their age,
     and logical fetch outcomes versus individual peer attempts. Delivery means receiver enqueueing;
     application execution is separate. Counts cover sends finalized after a process-local baseline,
-    which resets on restart. See `cumulus/client/spec-msg/src/metrics.rs` for labels and queries.
+    which resets on restart. Incomplete delivery accounting suppresses the delivery metrics until
+    restart. See `cumulus/client/spec-msg/src/metrics.rs` for labels and queries.
 crates:
 - name: cumulus-primitives-spec-messaging
   bump: major

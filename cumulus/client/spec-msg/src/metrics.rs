@@ -4,20 +4,20 @@
 
 //! Speculative messaging Prometheus metrics, prefixed with `parachain_spec_msg_`.
 //!
-//! Confirmation percentage per node and recipient, excluding idle or incomplete tracking.
+//! Delivery metrics are absent before initialization or, after incomplete history, until restart.
+//!
+//! Confirmation percentage per node and recipient, excluding idle traffic.
 //! Use totals: confirmation rates can exceed send rates while draining backlog.
 //!
 //! ```promql
-//! (100 * parachain_spec_msg_messages_confirmed_total
-//!   / (parachain_spec_msg_messages_sent_total > 0))
-//! and ignoring(recipient) (parachain_spec_msg_delivery_tracking_ready == 1)
+//! 100 * parachain_spec_msg_messages_confirmed_total
+//!   / (parachain_spec_msg_messages_sent_total > 0)
 //! ```
 //!
 //! Oldest pending age in seconds:
 //!
 //! ```promql
 //! clamp_min(time() - (parachain_spec_msg_oldest_pending_timestamp_seconds > 0), 0)
-//! and ignoring(recipient) (parachain_spec_msg_delivery_tracking_ready == 1)
 //! ```
 //!
 //! Fetch success percentage, excluding expected unwritten-stream polls and idle windows:
@@ -33,9 +33,7 @@ use crate::LOG_TARGET;
 use codec::DecodeAll;
 use cumulus_primitives_core::ParaId;
 use cumulus_primitives_spec_messaging::{ChannelMessage, StreamId};
-use prometheus_endpoint::{
-	register, CounterVec, Gauge, GaugeVec, Opts, PrometheusError, Registry, U64,
-};
+use prometheus_endpoint::{register, CounterVec, GaugeVec, Opts, PrometheusError, Registry, U64};
 use std::{
 	collections::{BTreeMap, VecDeque},
 	sync::Arc,
@@ -46,7 +44,6 @@ struct Inner {
 	confirmed: CounterVec<U64>,
 	pending: GaugeVec<U64>,
 	oldest_pending: GaugeVec<U64>,
-	delivery_tracking_ready: Gauge<U64>,
 	fetch_requests: CounterVec<U64>,
 	fetch_attempts: CounterVec<U64>,
 }
@@ -100,13 +97,6 @@ impl Metrics {
 				)?,
 				registry,
 			)?,
-			delivery_tracking_ready: register(
-				Gauge::new(
-					"parachain_spec_msg_delivery_tracking_ready",
-					"One after establishing a delivery baseline, zero if history is incomplete.",
-				)?,
-				registry,
-			)?,
 			fetch_requests: register(
 				CounterVec::new(
 					Opts::new(
@@ -133,7 +123,7 @@ impl Metrics {
 	pub(crate) fn delivery(&self) -> Option<DeliveryMetrics> {
 		self.0.as_ref().map(|metrics| DeliveryMetrics {
 			metrics: metrics.clone(),
-			channels: BTreeMap::new(),
+			channels: Some(BTreeMap::new()),
 			initialized: false,
 		})
 	}
@@ -253,7 +243,8 @@ struct ChannelDelivery {
 /// positions are retained, not payloads or an ever-growing history of delivered messages.
 pub(crate) struct DeliveryMetrics {
 	metrics: Arc<Inner>,
-	channels: BTreeMap<StreamId, ChannelDelivery>,
+	/// None after incomplete history: withdrawn series must stay absent until restart.
+	channels: Option<BTreeMap<StreamId, ChannelDelivery>>,
 	initialized: bool,
 }
 
@@ -269,14 +260,12 @@ impl DeliveryMetrics {
 		now: u64,
 		payload: impl Fn(&StreamId, u64) -> Option<Vec<u8>>,
 	) {
-		if !self.initialized {
-			self.metrics.delivery_tracking_ready.set(1);
-		}
+		let Some(channels) = &mut self.channels else { return };
 		for (stream, count) in counts {
 			let StreamId::Channel { recipient, .. } = stream else { continue };
 			let recipient = recipient.to_string();
 			let labels = [recipient.as_str()];
-			let channel = self.channels.entry(stream).or_default();
+			let channel = channels.entry(stream).or_default();
 			let mut sent = 0;
 			if self.initialized {
 				for position in channel.next..count {
@@ -289,15 +278,20 @@ impl DeliveryMetrics {
 						},
 						Some(_) => {},
 						None => {
-							// Metrics never prevent pruning. Exclude unknown history and mark the
-							// process's accounting incomplete instead of guessing Data counts.
-							self.metrics.delivery_tracking_ready.set(0);
+							// Withdraw every delivery series; partial counts must not look
+							// trustworthy. Metrics never prevent pruning, and fetch metrics remain
+							// available.
+							self.metrics.sent.reset();
+							self.metrics.confirmed.reset();
+							self.metrics.pending.reset();
+							self.metrics.oldest_pending.reset();
+							self.channels = None;
 							log::warn!(
 								target: LOG_TARGET,
-								"Delivery metrics incomplete: unavailable channel message at \
+								"Delivery metrics withdrawn until restart: unavailable channel message at \
 								 {stream:?} position {position}",
 							);
-							break;
+							return;
 						},
 					}
 				}
@@ -318,7 +312,7 @@ impl DeliveryMetrics {
 		// Several channels may share one recipient. Export their aggregate, including zeros when
 		// the last pending message is confirmed.
 		let mut recipients = BTreeMap::<ParaId, (u64, Option<u64>)>::new();
-		for (stream, channel) in &self.channels {
+		for (stream, channel) in channels {
 			let StreamId::Channel { recipient, .. } = stream else { continue };
 			let (pending, oldest) = recipients.entry(*recipient).or_default();
 			*pending += channel.pending.len() as u64;

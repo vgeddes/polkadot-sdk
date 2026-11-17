@@ -58,6 +58,19 @@ fn delivery(registry: &Registry, sent: u64, confirmed: u64, pending: u64) {
 	assert_eq!(sample(registry, "messages_pending", &labels), Some(pending as f64));
 }
 
+fn no_delivery(registry: &Registry) {
+	let families = registry.gather();
+	for suffix in [
+		"messages_sent_total",
+		"messages_confirmed_total",
+		"messages_pending",
+		"oldest_pending_timestamp_seconds",
+	] {
+		let name = format!("parachain_spec_msg_{suffix}");
+		assert!(!families.iter().any(|family| family.get_name() == name), "{name} is exported");
+	}
+}
+
 fn data(byte: u8) -> Vec<u8> {
 	ChannelMessage::Data(vec![byte]).encode()
 }
@@ -115,7 +128,6 @@ fn delivery_counts_only_data_once_across_channels_and_pruning() {
 		sample(&registry, "oldest_pending_timestamp_seconds", &[("recipient", "2001")]),
 		Some(0.0),
 	);
-	assert_eq!(sample(&registry, "delivery_tracking_ready", &[]), Some(1.0));
 }
 
 #[test]
@@ -164,16 +176,19 @@ fn restart_establishes_one_baseline_for_sends_and_confirmations() {
 
 	let (registry, metrics) = metrics();
 	let mut restarted = TestArchive::open(store).with_metrics(metrics);
-	assert_eq!(sample(&registry, "delivery_tracking_ready", &[]), Some(0.0));
+	no_delivery(&registry);
 	restarted.observe_delivery(&1, &BTreeMap::new(), 200);
 	delivery(&registry, 0, 0, 0);
+	assert_eq!(
+		sample(&registry, "oldest_pending_timestamp_seconds", &[("recipient", "2001")]),
+		Some(0.0),
+	);
 	import(&mut restarted, &mut model, 2, vec![(a, vec![data(3), data(4)])]);
 	restarted
 		.retain(2, &BTreeMap::from([(a, 3)]), 0)
 		.expect("retention succeeds; qed");
 	// The old pending message is excluded from both counters, even when confirmed now.
 	delivery(&registry, 2, 1, 1);
-	assert_eq!(sample(&registry, "delivery_tracking_ready", &[]), Some(1.0));
 }
 
 #[test]
@@ -198,20 +213,82 @@ fn seeded_history_and_later_backfill_do_not_enter_the_delivery_cohort() {
 		.retain(11, &BTreeMap::from([(a, 3)]), 0)
 		.expect("retention succeeds; qed");
 	delivery(&registry, 1, 1, 0);
-	assert_eq!(sample(&registry, "delivery_tracking_ready", &[]), Some(1.0));
 }
 
 #[test]
-fn unavailable_data_marks_accounting_incomplete_and_disabled_metrics_have_no_tracker() {
+fn incomplete_delivery_is_withdrawn_until_restart_without_disabling_fetch_metrics() {
 	for payload in [None, Some(vec![0xff])] {
-		let (registry, metrics) = metrics();
-		let mut delivery = metrics.delivery().expect("registered metrics enable delivery; qed");
-		delivery.observe([], &BTreeMap::new(), 0, |_, _| None);
-		delivery.observe([(channel(2001), 1)], &BTreeMap::new(), 100, |_, _| payload.clone());
-		assert_eq!(sample(&registry, "delivery_tracking_ready", &[]), Some(0.0));
-		delivery.observe([(channel(2001), 1)], &BTreeMap::new(), 110, |_, _| None);
-		assert_eq!(sample(&registry, "delivery_tracking_ready", &[]), Some(0.0));
+		let (registry, instrumentation) = metrics();
+		let mut tracker =
+			instrumentation.delivery().expect("registered metrics enable delivery; qed");
+		let (a, b, c) = (channel(2001), channel(2002), channel(2003));
+		let record_fetch = || {
+			let mut fetch = instrumentation.fetch(2000.into(), FetchKind::Proof);
+			fetch.start_attempt();
+			fetch.attempt("success");
+			fetch.finish("success");
+		};
+		no_delivery(&registry);
+		tracker.observe([], &BTreeMap::new(), 0, |_, _| None);
+		tracker.observe([(a, 2), (b, 1)], &BTreeMap::from([(a, 1)]), 100, |_, _| Some(data(1)));
+		delivery(&registry, 2, 1, 1);
+		assert_eq!(sample(&registry, "messages_pending", &[("recipient", "2002")]), Some(1.0));
+		record_fetch();
+
+		// A failure on the second recipient must also withdraw the first recipient's statistics,
+		// including any counters already updated during this observation.
+		tracker.observe([(a, 3), (b, 2)], &BTreeMap::from([(a, 2)]), 110, |stream, _| {
+			if *stream == b {
+				payload.clone()
+			} else {
+				Some(data(1))
+			}
+		});
+		no_delivery(&registry);
+		tracker.observe([(a, 4), (b, 3), (c, 1)], &BTreeMap::new(), 120, |_, _| {
+			panic!("withdrawn delivery tracking must not read further payloads")
+		});
+		no_delivery(&registry);
+		record_fetch();
+		for metric in ["fetch_requests_total", "fetch_attempts_total"] {
+			assert_eq!(fetch_sample(&registry, metric, "proof", "success"), Some(2.0));
+		}
+
+		// A restarted process can establish a fresh baseline and count new traffic again.
+		let (restarted_registry, restarted_metrics) = metrics();
+		let mut restarted =
+			restarted_metrics.delivery().expect("registered metrics enable delivery; qed");
+		no_delivery(&restarted_registry);
+		restarted.observe([(a, 4), (b, 3), (c, 1)], &BTreeMap::new(), 130, |_, _| {
+			panic!("establishing a baseline must not read historical payloads")
+		});
+		delivery(&restarted_registry, 0, 0, 0);
+		restarted.observe([(a, 5)], &BTreeMap::from([(a, 5)]), 140, |_, _| Some(data(2)));
+		delivery(&restarted_registry, 1, 1, 0);
 	}
+}
+
+#[test]
+fn withdrawn_delivery_metrics_do_not_prevent_retention() {
+	let (registry, metrics) = metrics();
+	let mut archive = archive(Arc::new(MemoryStore::default()), metrics);
+	let stream = channel(2001);
+	let mut model = Model::default();
+	import(&mut archive, &mut model, 1, vec![(stream, vec![data(1)])]);
+	archive.retain(1, &BTreeMap::new(), 0).expect("retention succeeds; qed");
+	delivery(&registry, 1, 0, 1);
+	for (hash, payload) in [(2, vec![0xff]), (3, data(2))] {
+		import(&mut archive, &mut model, hash, vec![(stream, vec![payload])]);
+		archive
+			.retain(hash, &BTreeMap::from([(stream, hash)]), 0)
+			.expect("incomplete metrics must not block retention; qed");
+		no_delivery(&registry);
+		assert!(archive.unconfirmed_channels(&hash).is_empty());
+	}
+}
+
+#[test]
+fn disabled_metrics_have_no_delivery_tracker() {
 	assert!(Metrics::register(None)
 		.expect("disabled registration cannot fail; qed")
 		.delivery()
