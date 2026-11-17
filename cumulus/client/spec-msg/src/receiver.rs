@@ -24,7 +24,8 @@
 //! - [`Receiver::assemble`]: one lift per recorded stream, checked with `build_requires_entry`.
 
 use crate::{
-	fetch::{fetch, RequestError, Transport},
+	fetch::{fetch_with_metrics, RequestError, Transport},
+	metrics::{FetchKind, Metrics},
 	pool::{Binding, HeadRead, SourcePool},
 	LOG_TARGET,
 };
@@ -238,6 +239,7 @@ pub struct Receiver<H, T: ?Sized> {
 	state: Mutex<State<H>>,
 	/// Where the next block starts handing out budget.
 	rotation: AtomicUsize,
+	metrics: Metrics,
 }
 
 impl<H, T> Receiver<H, T>
@@ -253,7 +255,14 @@ where
 			transport: Rotating { inner: transport, rounds: Mutex::new(BTreeMap::new()) },
 			state: Mutex::new(State { sources: BTreeMap::new(), live: HashMap::new() }),
 			rotation: AtomicUsize::new(0),
+			metrics: Metrics::default(),
 		}
+	}
+
+	/// Record fetch outcomes in the node's shared metrics registry.
+	pub fn with_metrics(mut self, metrics: Metrics) -> Self {
+		self.metrics = metrics;
+		self
 	}
 
 	/// The chain this receiver consumes for.
@@ -386,7 +395,7 @@ where
 
 		for (id, cursor) in &wants.registers {
 			let stream = id.peer_ack_stream(self.us).1;
-			match self.fetch_head(source, stream, root).await {
+			match self.fetch_head(source, stream, root, cursor.0 == 0).await {
 				Ok((head, tree_proof)) => {
 					let mut state = self.state.lock();
 					state.sources.entry(source).or_default().insert_head(stream, head, tree_proof);
@@ -462,7 +471,13 @@ where
 			start: Some(MessagePosition(frontier.leaf_count())),
 			max_bytes,
 		};
-		fetch(&self.transport, source, &request, Some(frontier)).await
+		let kind = if max_bytes == 0 {
+			FetchKind::Proof
+		} else {
+			FetchKind::Channel { pending: frontier.leaf_count() == 0 }
+		};
+		fetch_with_metrics(&self.transport, source, &request, Some(frontier), &self.metrics, kind)
+			.await
 	}
 
 	/// How the payloads the pool holds of the channel `stream` from `stored` relate to the stream
@@ -495,7 +510,16 @@ where
 			start: None,
 			max_bytes: MAX_SPECULATIVE_MESSAGE_LEN,
 		};
-		let Ok(head) = fetch(&self.transport, source, &request, None).await else {
+		let Ok(head) = fetch_with_metrics(
+			&self.transport,
+			source,
+			&request,
+			None,
+			&self.metrics,
+			FetchKind::Proof,
+		)
+		.await
+		else {
 			return Held::Unknown;
 		};
 		let Some(known) = extended(&head.frontier, head.payloads.iter()) else {
@@ -825,7 +849,16 @@ where
 				start: Some(MessagePosition(frontier.leaf_count())),
 				max_bytes: FETCH_MAX_BYTES,
 			};
-			let response = fetch(&self.transport, source, &request, Some(&frontier)).await.ok()?;
+			let response = fetch_with_metrics(
+				&self.transport,
+				source,
+				&request,
+				Some(&frontier),
+				&self.metrics,
+				FetchKind::Gap,
+			)
+			.await
+			.ok()?;
 			let wanted = (read_position - frontier.leaf_count()) as usize;
 			let payloads = &response.payloads[..response.payloads.len().min(wanted)];
 			if payloads.is_empty() {
@@ -933,7 +966,16 @@ where
 			start: Some(MessagePosition(count)),
 			max_bytes: 0,
 		};
-		let Ok(response) = fetch(&self.transport, source, &request, Some(endpoint)).await else {
+		let Ok(response) = fetch_with_metrics(
+			&self.transport,
+			source,
+			&request,
+			Some(endpoint),
+			&self.metrics,
+			FetchKind::Proof,
+		)
+		.await
+		else {
 			return false;
 		};
 		let binding = Binding { extension: response.extension, tree_proof: response.tree_proof };
@@ -953,6 +995,7 @@ where
 		source: ParaId,
 		stream: StreamId,
 		root: StreamsRoot,
+		pending: bool,
 	) -> Result<(HeadRead, StreamProof), RequestError> {
 		let request = MessagesRequest {
 			stream,
@@ -960,14 +1003,25 @@ where
 			start: None,
 			max_bytes: Register::max_encoded_len() as u32,
 		};
-		let mut response = fetch(&self.transport, source, &request, None).await?;
+		let kind = FetchKind::Register { pending };
+		let mut response =
+			fetch_with_metrics(&self.transport, source, &request, None, &self.metrics, kind)
+				.await?;
 		if response.payloads.is_empty() {
 			let request = MessagesRequest {
 				start: Some(MessagePosition(response.frontier.leaf_count())),
 				max_bytes: MAX_SPECULATIVE_MESSAGE_LEN,
 				..request
 			};
-			response = fetch(&self.transport, source, &request, Some(&response.frontier)).await?;
+			response = fetch_with_metrics(
+				&self.transport,
+				source,
+				&request,
+				Some(&response.frontier),
+				&self.metrics,
+				FetchKind::Register { pending: false },
+			)
+			.await?;
 		}
 		let [payload] = <[Vec<u8>; 1]>::try_from(response.payloads.into_inner())
 			.map_err(|_| RequestError::Unserved { refusals: Vec::new() })?;

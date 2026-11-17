@@ -23,7 +23,7 @@ use crate::{
 	protocol,
 	store::ArchiveStore,
 	worker::{backfill, read_watermarks},
-	Archive, ArchiveError, FinalizedRoots, MemoryStore,
+	Archive, ArchiveError, FinalizedRoots, MemoryStore, Metrics,
 };
 use codec::{Decode, Encode};
 use cumulus_primitives_core::ParaId;
@@ -203,11 +203,25 @@ fn a_round_backfills_each_seeded_stream_from_own_peers() {
 	// `channel(1)` is confirmed up to 2, `channel(3)` past its floor; `channel(1)` before the
 	// watermark is read waits.
 	let watermarks = Mutex::new(BTreeMap::from([(channel(3), 2)]));
-	futures::executor::block_on(backfill(&seeded, &10, &watermarks, 2000.into(), &transport));
+	futures::executor::block_on(backfill(
+		&seeded,
+		&10,
+		&watermarks,
+		2000.into(),
+		&transport,
+		&Metrics::default(),
+	));
 	assert_eq!(seeded.read().backfill_pending(), [channel(1)].into());
 
 	watermarks.lock().insert(channel(1), 2);
-	futures::executor::block_on(backfill(&seeded, &10, &watermarks, 2000.into(), &transport));
+	futures::executor::block_on(backfill(
+		&seeded,
+		&10,
+		&watermarks,
+		2000.into(),
+		&transport,
+		&Metrics::default(),
+	));
 	let seeded = seeded.read();
 	assert!(seeded.backfill_pending().is_empty());
 	assert_eq!(
@@ -230,7 +244,14 @@ fn a_round_backfills_from_the_lowest_leaf_its_peers_kept() {
 	let transport = ArchiveTransport(vec![pruned(4), pruned(3)]);
 	let seeded = RwLock::new(seeded);
 	let watermarks = Mutex::new(BTreeMap::from([(channel(1), 1)]));
-	futures::executor::block_on(backfill(&seeded, &10, &watermarks, 2000.into(), &transport));
+	futures::executor::block_on(backfill(
+		&seeded,
+		&10,
+		&watermarks,
+		2000.into(),
+		&transport,
+		&Metrics::default(),
+	));
 
 	let seeded = seeded.read();
 	assert!(!seeded.backfill_pending().contains(&channel(1)));
@@ -831,6 +852,7 @@ fn round(
 		1000.into(),
 		&ArchiveTransport(peers),
 		&FakeRoots(root),
+		&Metrics::default(),
 	));
 	let marks = watermarks.lock().clone();
 	sender.write().retain(1, &marks, 0).unwrap();

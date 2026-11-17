@@ -24,11 +24,13 @@
 use crate::common::{types::ParachainClient, ConstructNodeRuntimeApi, NodeBlock};
 use cumulus_client_spec_msg::{
 	fetch_protocol_config, run_archiver, run_receiver, run_request_handler, run_watermark_reader,
-	Archive, AuxArchiveStore, Budget, NetworkTransport, Receiver, RelayFinalizedRoots, Transport,
+	Archive, AuxArchiveStore, Budget, Metrics, NetworkTransport, Receiver, RelayFinalizedRoots,
+	Transport,
 };
 use cumulus_primitives_core::ParaId;
 use cumulus_relay_chain_interface::RelayChainInterface;
 use parachains_common_types::Hash;
+use prometheus_endpoint::Registry;
 use sc_network::{
 	config::{FullNetworkConfiguration, IncomingRequest, MultiaddrWithPeerId},
 	service::traits::NetworkService,
@@ -67,13 +69,19 @@ pub(crate) fn start<Block, RuntimeApi>(
 	requests: async_channel::Receiver<IncomingRequest>,
 	para_id: ParaId,
 	collator: bool,
+	registry: Option<&Registry>,
 ) -> Option<SpecMsgReceiver>
 where
 	Block: NodeBlock,
 	RuntimeApi: ConstructNodeRuntimeApi<Block, ParachainClient<Block, RuntimeApi>>,
 {
-	let archive =
-		Arc::new(parking_lot::RwLock::new(Archive::open(AuxArchiveStore::new(client.clone()))));
+	let metrics = Metrics::register(registry).unwrap_or_else(|error| {
+		log::warn!(target: "spec-msg", "Failed to register spec-msg metrics: {error}");
+		Metrics::default()
+	});
+	let archive = Arc::new(parking_lot::RwLock::new(
+		Archive::open(AuxArchiveStore::new(client.clone())).with_metrics(metrics.clone()),
+	));
 	let watermarks = Arc::new(parking_lot::Mutex::new(BTreeMap::new()));
 
 	let mut peers = BTreeMap::<ParaId, Vec<_>>::new();
@@ -113,7 +121,8 @@ where
 		return None;
 	}
 
-	let receiver: SpecMsgReceiver = Arc::new(Receiver::new(para_id, Budget::default(), transport));
+	let receiver: SpecMsgReceiver =
+		Arc::new(Receiver::new(para_id, Budget::default(), transport).with_metrics(metrics));
 	spawner.spawn(
 		"spec-msg-receiver",
 		Some("spec-msg"),

@@ -1,8 +1,19 @@
-title: 'spec-msg: align primitives with design v0.6'
+title: 'spec-msg: align with design v0.6 and instrument delivery'
 doc:
 - audience: Runtime Dev
   description: |-
     Aligns `cumulus-primitives-spec-messaging` with the Speculative Messaging v0.6 design.
+- audience: Node Operator
+  description: |-
+    Adds `parachain_spec_msg_*` Prometheus metrics to spec-msg-enabled omni-nodes for
+    finalized outbound Data messages, receiver confirmations, pending messages and their age,
+    and logical fetch outcomes versus individual peer attempts. Delivery means receiver enqueueing;
+    application execution is separate. Counts cover sends finalized after a process-local baseline,
+    which resets on restart. See `cumulus/client/spec-msg/src/metrics.rs` for labels and queries.
 crates:
 - name: cumulus-primitives-spec-messaging
   bump: major
+- name: cumulus-client-spec-msg
+  bump: minor
+- name: polkadot-omni-node-lib
+  bump: patch

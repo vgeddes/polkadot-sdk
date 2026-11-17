@@ -1,5 +1,8 @@
 # Speculative messaging demo
 
+See the [metrics module](../../client/spec-msg/src/metrics.rs) for delivery semantics and PromQL
+queries available with `--enable-spec-msg`.
+
 `spec_msg_delivers_xcm_without_hrmp` (`tests/zombie_ci/spec_msg.rs`) sends one XCM between two penpal chains
 (2000 and 2001) over spec-msg, with no HRMP channel. The network boots in about 2 minutes. The channel open, the
 send and the checkpoints take about 1.5 more minutes.

@@ -27,6 +27,7 @@
 //! [`Archive::retain`] prunes channels below their watermark and the rest past the serving horizon.
 
 use crate::{
+	metrics::{DeliveryMetrics, Metrics},
 	store::{ArchiveStore, Batch},
 	LOG_TARGET,
 };
@@ -245,6 +246,7 @@ pub struct Archive<H, S> {
 	tip: Option<Tip<H>>,
 	/// Every stream's state at the tip.
 	streams: BTreeMap<StreamId, StreamState>,
+	delivery: Option<DeliveryMetrics>,
 }
 
 impl<H, S> Archive<H, S>
@@ -255,11 +257,44 @@ where
 	/// Open the archive in `store`, resuming at its persisted tip.
 	pub fn open(store: S) -> Self {
 		let tip: Option<Tip<H>> = store.get(&tip_key()).and_then(|v| Tip::decode(&mut &v[..]).ok());
-		let mut archive = Self { store, tip, streams: BTreeMap::new() };
+		let mut archive = Self { store, tip, streams: BTreeMap::new(), delivery: None };
 		if let Some(tip) = tip {
 			archive.streams = archive.state_at(&tip.hash).unwrap_or_default();
 		}
 		archive
+	}
+
+	/// Enable delivery accounting. Its baseline is the first finalized state observed after
+	/// this call; earlier sends and their confirmations are excluded together.
+	pub fn with_metrics(mut self, metrics: Metrics) -> Self {
+		self.delivery = metrics.delivery();
+		self
+	}
+
+	pub(crate) fn metrics(&self) -> Metrics {
+		self.delivery.as_ref().map(DeliveryMetrics::metrics).unwrap_or_default()
+	}
+
+	/// Observe finalized sends while their payloads still exist. Also used at startup to set the
+	/// baseline before following new finality notifications. Disabled metrics do no store reads.
+	pub(crate) fn observe_delivery(
+		&mut self,
+		finalized: &H,
+		watermarks: &BTreeMap<StreamId, u64>,
+		now: u64,
+	) {
+		if self.delivery.is_none() {
+			return;
+		}
+		let Some(state) = self.state_at(finalized) else { return };
+		if let Some(delivery) = &mut self.delivery {
+			delivery.observe(
+				state.into_iter().map(|(stream, state)| (stream, state.leaf_count)),
+				watermarks,
+				now,
+				|stream, position| self.store.get(&payload_key(stream, position)),
+			);
+		}
 	}
 
 	/// The archived tip, if any block was archived.
@@ -718,6 +753,7 @@ where
 		horizon_cutoff: u64,
 	) -> Result<(), ArchiveError> {
 		let top = self.boundary(&finalized).ok_or(ArchiveError::UnknownBlock)?.number;
+		self.observe_delivery(&finalized, watermarks, crate::worker::now());
 		let mut oldest = self.store.get(&oldest_key()).and_then(|v| u64::decode(&mut &v[..]).ok());
 
 		// Index the newly finalized blocks by number, walking back to the last indexed one.
