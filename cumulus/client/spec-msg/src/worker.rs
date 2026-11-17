@@ -27,7 +27,8 @@
 
 use crate::{
 	archive::Archive,
-	fetch::{fetch, RequestError, Transport},
+	fetch::{fetch_with_metrics, RequestError, Transport},
+	metrics::{FetchKind, Metrics},
 	protocol::MAX_PAYLOAD_BYTES,
 	relay::FinalizedRoots,
 	store::ArchiveStore,
@@ -58,7 +59,7 @@ use std::{
 /// the design's serving horizon (§ Liftability), mirroring relay-chain availability retention.
 pub const SERVING_HORIZON: Duration = Duration::from_secs(25 * 60 * 60);
 
-fn now() -> u64 {
+pub(crate) fn now() -> u64 {
 	SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs())
 }
 
@@ -91,6 +92,10 @@ pub async fn run_archiver<Block, C, S>(
 	if !info.best_number.is_zero() {
 		archiver.follow(info.best_hash);
 	}
+	archiver
+		.archive
+		.write()
+		.observe_delivery(&info.finalized_hash, &BTreeMap::new(), now());
 	loop {
 		select! {
 			import = imports.next() => match import {
@@ -370,13 +375,15 @@ pub async fn run_watermark_reader<Block, C, S, T, R>(
 	T: Transport + ?Sized,
 	R: FinalizedRoots + ?Sized,
 {
+	let metrics = archive.read().metrics();
 	let mut finality = client.finality_notification_stream().fuse();
 	while let Some(mut finalized) = finality.next().await {
 		while let Some(Some(newer)) = finality.next().now_or_never() {
 			finalized = newer;
 		}
-		read_watermarks(&archive, &finalized.hash, &watermarks, us, &*transport, &*roots).await;
-		backfill(&archive, &finalized.hash, &watermarks, us, &*transport).await;
+		read_watermarks(&archive, &finalized.hash, &watermarks, us, &*transport, &*roots, &metrics)
+			.await;
+		backfill(&archive, &finalized.hash, &watermarks, us, &*transport, &metrics).await;
 	}
 }
 
@@ -390,6 +397,7 @@ pub(crate) async fn backfill<H, S, T>(
 	watermarks: &Mutex<BTreeMap<StreamId, u64>>,
 	us: ParaId,
 	transport: &T,
+	metrics: &Metrics,
 ) where
 	H: Encode + Decode + Copy + Eq + std::fmt::Debug,
 	S: ArchiveStore,
@@ -413,7 +421,7 @@ pub(crate) async fn backfill<H, S, T>(
 			archive.write().backfill_done(&stream)
 		} else {
 			let Some((frontier, payloads)) =
-				fetch_range(transport, us, stream, under, target, floor).await
+				fetch_range(transport, us, stream, under, target, floor, metrics).await
 			else {
 				log::debug!(target: LOG_TARGET, "No own peer served {stream:?} below {floor}");
 				continue;
@@ -443,6 +451,7 @@ async fn fetch_range<T: Transport + ?Sized>(
 	under: StreamsRoot,
 	start: u64,
 	end: u64,
+	metrics: &Metrics,
 ) -> Option<(MmrFrontier, Vec<Vec<u8>>)> {
 	let (mut at, mut frontier, mut payloads) = (start, None, Vec::new());
 	while at < end {
@@ -452,7 +461,8 @@ async fn fetch_range<T: Transport + ?Sized>(
 			start: Some(MessagePosition(at)),
 			max_bytes: MAX_PAYLOAD_BYTES,
 		};
-		match fetch(transport, us, &request, None).await {
+		match fetch_with_metrics(transport, us, &request, None, metrics, FetchKind::Backfill).await
+		{
 			Ok(response) => {
 				let taken = response.payloads.len().min((end - at) as usize);
 				if taken == 0 {
@@ -491,6 +501,7 @@ pub(crate) async fn read_watermarks<H, S, T, R>(
 	us: ParaId,
 	transport: &T,
 	roots: &R,
+	metrics: &Metrics,
 ) where
 	H: Encode + Decode + Copy + Eq + std::fmt::Debug,
 	S: ArchiveStore,
@@ -510,7 +521,10 @@ pub(crate) async fn read_watermarks<H, S, T, R>(
 			start: None,
 			max_bytes: MAX_SPECULATIVE_MESSAGE_LEN,
 		};
-		let Ok(response) = fetch(transport, recipient, &request, None).await else {
+		let kind = FetchKind::Watermark { pending: !watermarks.lock().contains_key(&stream) };
+		let Ok(response) =
+			fetch_with_metrics(transport, recipient, &request, None, metrics, kind).await
+		else {
 			log::debug!(target: LOG_TARGET, "No register of {recipient:?} for {stream:?}");
 			continue;
 		};

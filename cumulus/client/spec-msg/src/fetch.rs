@@ -19,7 +19,11 @@
 //! first response that verifies under the named root. Some refusals are expected, so no peer is
 //! penalized.
 
-use crate::{protocol::PROTOCOL_NAME, LOG_TARGET};
+use crate::{
+	metrics::{FetchKind, Metrics},
+	protocol::PROTOCOL_NAME,
+	LOG_TARGET,
+};
 use codec::{DecodeLimit, Encode};
 use cumulus_primitives_core::ParaId;
 use cumulus_primitives_spec_messaging::{
@@ -106,16 +110,35 @@ pub async fn fetch<T: Transport + ?Sized>(
 	request: &MessagesRequest,
 	stored: Option<&MmrFrontier>,
 ) -> Result<MessagesResponse, RequestError> {
+	fetch_with_metrics(transport, source, request, stored, &Metrics::default(), FetchKind::Other)
+		.await
+}
+
+/// The instrumented requester. A logical fetch has one outcome even when it tries several peers.
+pub(crate) async fn fetch_with_metrics<T: Transport + ?Sized>(
+	transport: &T,
+	source: ParaId,
+	request: &MessagesRequest,
+	stored: Option<&MmrFrontier>,
+	metrics: &Metrics,
+	kind: FetchKind,
+) -> Result<MessagesResponse, RequestError> {
+	let mut observation = metrics.fetch(source, kind);
 	let peers = transport.peers(source);
 	if peers.is_empty() {
+		observation.finish("no_peers");
 		return Err(RequestError::NoPeers);
 	}
 	let encoded = request.encode();
 	let mut refusals = Vec::new();
+	let mut only_pending = kind.expects_unknown_stream();
 	for peer in peers {
+		observation.start_attempt();
 		let bytes = match transport.request(peer, encoded.clone()).await {
 			Ok(bytes) => bytes,
 			Err(e) => {
+				observation.attempt("transport_error");
+				only_pending = false;
 				log::debug!(target: LOG_TARGET, "Peer {peer} of {source:?} did not serve: {e}");
 				continue;
 			},
@@ -124,6 +147,8 @@ pub async fn fetch<T: Transport + ?Sized>(
 		let response = match FetchResponse::decode_with_depth_limit(MAX_DECODE_DEPTH, &mut input) {
 			Ok(response) if input.is_empty() => response,
 			_ => {
+				observation.attempt("decode_error");
+				only_pending = false;
 				log::debug!(target: LOG_TARGET, "Peer {peer} of {source:?} sent junk");
 				continue;
 			},
@@ -131,6 +156,17 @@ pub async fn fetch<T: Transport + ?Sized>(
 		let response = match response {
 			Ok(response) => response,
 			Err(e) => {
+				let result = match e {
+					FetchError::UnknownStream if kind.expects_unknown_stream() => {
+						"unknown_stream_pending"
+					},
+					FetchError::UnknownStream => "unknown_stream",
+					FetchError::UnknownRoot => "unknown_root",
+					FetchError::OutsideHorizon { .. } => "outside_horizon",
+					FetchError::BeyondHead => "beyond_head",
+				};
+				observation.attempt(result);
+				only_pending &= result == "unknown_stream_pending";
 				log::debug!(target: LOG_TARGET, "Peer {peer} of {source:?} refused: {e:?}");
 				refusals.push((peer, e));
 				continue;
@@ -141,12 +177,18 @@ pub async fn fetch<T: Transport + ?Sized>(
 			None => verify_messages(request, &response),
 		};
 		match verified {
-			Ok(()) => return Ok(response),
+			Ok(()) => {
+				observation.attempt("success");
+				observation.finish("success");
+				return Ok(response);
+			},
 			Err(VerifyError::FrontierMismatch)
 				if stored.is_some_and(|stored| {
 					response.frontier.leaf_count() == stored.leaf_count()
 				}) && verify_messages(request, &response).is_ok() =>
 			{
+				observation.attempt("diverged");
+				observation.finish("diverged");
 				log::debug!(
 					target: LOG_TARGET,
 					"Peer {peer} of {source:?} proved {:?} under {:?} does not run through the \
@@ -157,6 +199,8 @@ pub async fn fetch<T: Transport + ?Sized>(
 				return Err(RequestError::Diverged);
 			},
 			Err(e) => {
+				observation.attempt("invalid_proof");
+				only_pending = false;
 				log::debug!(
 					target: LOG_TARGET,
 					"Response of peer {peer} of {source:?} does not verify: {e:?}",
@@ -164,5 +208,6 @@ pub async fn fetch<T: Transport + ?Sized>(
 			},
 		}
 	}
+	observation.finish(if only_pending { "unknown_stream_pending" } else { "unserved" });
 	Err(RequestError::Unserved { refusals })
 }

@@ -31,6 +31,7 @@
 
 pub mod archive;
 pub mod fetch;
+pub mod metrics;
 pub mod pool;
 pub mod protocol;
 pub mod receiver;
@@ -41,6 +42,7 @@ pub mod worker;
 
 pub use archive::{Archive, ArchiveError, Tip};
 pub use fetch::{fetch, NetworkTransport, RequestError, Transport};
+pub use metrics::Metrics;
 pub use protocol::{fetch_protocol_config, run_request_handler, PROTOCOL_NAME};
 pub use receiver::{Budget, ChainView, Receiver, SourceWants};
 pub use relay::{
@@ -56,6 +58,8 @@ pub const LOG_TARGET: &str = "spec-msg";
 
 #[cfg(test)]
 mod archive_model;
+#[cfg(test)]
+mod metrics_tests;
 #[cfg(test)]
 mod receiver_model;
 #[cfg(test)]
